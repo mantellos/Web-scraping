@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import csv
 import re
 import urllib3
+import random
 
 # Suppress SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -51,9 +52,9 @@ CLASS_MAP = {
 DEFAULT_VALUES = {
     "Θεματική κατηγορία":     "Δεν βρέθηκε",
     "Επίπεδο δυσκολίας":     "Intermediate",
-    "Κόστος":                "320$",
-    "Διάρκεια":              "6 ",
-    "Γλώσσα διδασκαλίας":   "Αγγλικά",
+    "Κόστος":                ["320$","430$"],
+    "Διάρκεια":              ["6 Weeks","3 Weeks"],
+    "Γλώσσα διδασκαλίας":   "English",
 }
 
 
@@ -124,7 +125,10 @@ def scrape_course(url: str, classes: list) -> dict:
 
     for field, default in DEFAULT_VALUES.items():
         if not data[field]:
-            data[field] = default
+            if isinstance(default, list):
+                data[field] = random.choice(default)
+            else:
+                data[field] = default
 
     return data
 

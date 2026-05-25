@@ -7,11 +7,13 @@ venv_python = os.path.join(os.path.dirname(__file__), "venv", "Scripts", "python
 
 def fetch_api():
     print("Πατήθηκε η Συλλογή μέσω του API!")
-    subprocess.Popen([venv_python, "Web-Data-API.py"])
+    script_path = os.path.join(os.path.dirname(__file__), "Web-Data-API.py")
+    subprocess.Popen(["python", script_path])
 
 def fetch_scrape():
     print("Πατήθηκε η Συλλογή μέσω Scraping!")
-    subprocess.Popen([venv_python, "Scraping.py"])
+    script_path = os.path.join(os.path.dirname(__file__), "Scraping.py")
+    subprocess.Popen(["python", script_path])
 
 
 # 1. Δημιουργία κύριου παραθύρου
