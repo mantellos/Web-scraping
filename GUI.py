@@ -1,21 +1,23 @@
 import tkinter as tk
 import subprocess
-import pandas as pd
+import os
+import sys
+
+venv_python = os.path.join(os.path.dirname(__file__), "venv", "Scripts", "python.exe")
 
 def fetch_api():
     print("Πατήθηκε η Συλλογή μέσω του API!")
+    subprocess.Popen([venv_python, "Web-Data-API.py"])
 
 def fetch_scrape():
     print("Πατήθηκε η Συλλογή μέσω Scraping!")
-    subprocess.Popen(["python", "Scraping.py"])
+    subprocess.Popen([venv_python, "Scraping.py"])
 
 
 # 1. Δημιουργία κύριου παραθύρου
 root = tk.Tk()
 root.title("Information")
 root.geometry("820x520")  # πλάτος x ύψος σε pixels
-df_empty = pd.DataFrame()
-df_empty.to_csv("courses_data.csv", index=False)
 # 2. Widgets (στοιχεία διεπαφής)
 label = tk.Label(root, text="Univeristy Courses: ", font=("Arial", 20))
 label.pack(pady=10)
@@ -34,7 +36,7 @@ lista_mathiton = """Συμμετέχοντες | Αριθμός Μητρώου |
 
 # Προσοχή: Το βάζουμε μέσα στο 'content_frame', ΟΧΙ στο 'root'
 left_label = tk.Label(content_frame, text=lista_mathiton, justify="left", font=("Consolas", 10))
-# Το κολλάμε στα ΑΡΙΣΤΕΡΑ τουf αόρατου κουτιού
+# Το κολλάμε στα ΑΡΙΣΤΕΡΑ του αόρατου κουτιού
 left_label.pack(side=tk.LEFT)
 
 right_label = tk.Label(content_frame, text="Τμήμα Μηχανικών Η/Υ και Πληροφορικής\n Πανεπιστήμιο Πατρών", justify="left", fg="black",font=("Arial", 12, "bold"))

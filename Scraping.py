@@ -2,6 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 import csv
 import re
+import urllib3
+
+# Suppress SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SITES = [
     {
@@ -33,10 +37,10 @@ HEADERS = {
 }
 
 FIELD_MAP = {
-    ("Subject"):    "Θεματική κατηγορία",
-    ("Difficulty"): "Επίπεδο δυσκολίας",
-    ("Price"):"Κόστος",
-    ("Duration"):   "Διάρκεια",
+    ("Subject",):    "Θεματική κατηγορία",
+    ("Difficulty",): "Επίπεδο δυσκολίας",
+    ("Price",):"Κόστος",
+    ("Duration",):   "Διάρκεια",
     ("Course Language", "Language"):"Γλώσσα διδασκαλίας",
 }
 CLASS_MAP = {
@@ -55,8 +59,16 @@ DEFAULT_VALUES = {
 
 def scrape_course(url: str, classes: list) -> dict:
     """Κάνει scrape τη σελίδα του μαθήματος και επιστρέφει dict με τα δεδομένα."""
-    response = requests.get(url, headers=HEADERS, timeout=15)
-    response.raise_for_status()
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10, verify=False)
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        print(f"Timeout - Η σύνδεση ξεπέρασε το όριο χρόνου")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Σφάλμα σύνδεσης: {type(e).__name__}")
+        return None
+    
     soup = BeautifulSoup(response.text, "html.parser")
 
     data = {
@@ -151,15 +163,21 @@ def main():
         print(f"   Classes: {classes}")
         try:
             data = scrape_course(url, classes)
+            if data is None:
+                continue
             all_courses.append(data)
             print(f"   ✅ {data.get('Τίτλος μαθήματος', 'Άγνωστος τίτλος')}")
             for css_class in classes:
                 key = f"Class: {css_class}"
                 print(f"   {key}: {data.get(key, '-')}")
         except requests.HTTPError as e:
-            print(f"  HTTP Error {e.response.status_code}")
+            print(f"   HTTP Error {e.response.status_code}")
+        except requests.exceptions.Timeout:
+            print(f"   Timeout - Σύνδεση πολύ αργή")
+        except requests.exceptions.ConnectionError as e:
+            print(f"   Σφάλμα σύνδεσης: {e}")
         except Exception as e:
-            print(f" Σφάλμα: {e}")
+            print(f"   Σφάλμα: {e}")
 
     if not all_courses:
         print("\nΔεν βρέθηκαν δεδομένα. Έλεγξε τη σύνδεσή σου και δοκίμασε τοπικά.")
