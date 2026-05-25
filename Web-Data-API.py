@@ -1,5 +1,6 @@
 import requests
 import csv
+import pandas as pd
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
@@ -82,13 +83,13 @@ with open(csv_file, mode="w", newline="", encoding="utf-8") as f:
         price    = course.get("price")
 
         writer.writerow({
-            "title"   : course.get("name"),
-            "provider": course.get("provider"),
-            "category": course.get("courseType", "Uncategorized"),
-            "level"   : course.get("level", "Not specified"),
-            "duration": course.get("duration", "6 months"),
-            "language": course.get("primaryLanguages", "english").upper(),
-            "cost"    : f"{price} $" if price else "Free"
+            "Τίτλος μαθήματος"   : course.get("name"),
+            "Πάροχος / Πανεπιστήμιο": course.get("provider"),
+            "Θεματική κατηγορία": course.get("courseType", "Uncategorized"),
+            "Επίπεδο δυσκολίας"   : course.get("level", "Not specified"),
+            "Κόστος": f"{price} $" if price else "Free",
+            "Διάρκεια": course.get("duration", "6 months"),
+            "Γλώσσα διδασκαλίας": course.get("primaryLanguages", "english").upper(),
         })
 
 print(f"\nΤα δεδομένα αποθηκεύτηκαν στο αρχείο: {csv_file}")

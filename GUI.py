@@ -1,16 +1,21 @@
 import tkinter as tk
+import subprocess
+import pandas as pd
 
 def fetch_api():
     print("Πατήθηκε η Συλλογή μέσω του API!")
 
 def fetch_scrape():
-    print("Πατήθηκε η Συλλογή μέσψ Scraping!")
+    print("Πατήθηκε η Συλλογή μέσω Scraping!")
+    subprocess.Popen(["python", "Scraping.py"])
+
 
 # 1. Δημιουργία κύριου παραθύρου
 root = tk.Tk()
 root.title("Information")
 root.geometry("820x520")  # πλάτος x ύψος σε pixels
-
+df_empty = pd.DataFrame()
+df_empty.to_csv("courses_data.csv", index=False)
 # 2. Widgets (στοιχεία διεπαφής)
 label = tk.Label(root, text="Univeristy Courses: ", font=("Arial", 20))
 label.pack(pady=10)
@@ -48,6 +53,7 @@ btn_api.pack(side=tk.LEFT, padx=40) # Το padx=20 βάζει κενό ΑΝΑΜ�
 
 btn_scrape = tk.Button(button_frame, text="Συλλογή μέσω Scraping", width=20, font=("Arial", 12), command=fetch_scrape)
 btn_scrape.pack(side=tk.LEFT, padx=40)
+
 
 # Έναρξη του event loop
 root.mainloop()
