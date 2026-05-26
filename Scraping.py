@@ -11,20 +11,26 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SITES = [
     {
         "url": "https://pll.harvard.edu/course/using-python-research",
-        "classes": ["field__item"],
+        "classes": ["topics--teaser"],
     },
     {
         "url": "https://pll.harvard.edu/course/cs50-lawyers",
-        "classes": ["field__item"],
+        "classes": ["topics--teaser"],
     },
     {
         "url": "https://online.yale.edu/programs/foundations-animal-ethics",
-        "classes": ["field__item", "badge badge-primary"],
+        "classes": ["badge badge-primary"],
     },
     {
         "url": "https://online.yale.edu/programs/foundations-of-bioethics",
+        "classes": ["badge badge-primary"],
+    },
+
+    {
+        "url": "https://www.tuni.fi/en/tau/open-university/course-offering/5g-mobile-communications",
         "classes": ["field__item", "badge badge-primary"],
     },
+
 ]
 
 HEADERS = {
@@ -38,23 +44,24 @@ HEADERS = {
 }
 
 FIELD_MAP = {
-    ("Subject",):    "Θεματική κατηγορία",
+    ("dubject","Study fields"):  "Θεματική κατηγορία",
     ("Difficulty",): "Επίπεδο δυσκολίας",
     ("Price",):"Κόστος",
     ("Duration",):   "Διάρκεια",
     ("Course Language", "Language"):"Γλώσσα διδασκαλίας",
 }
 CLASS_MAP = {
-    "field field--name-field-fees-text field--type-string field--label-above":       "Κόστος",  # ή όποιο πεδίο αντιστοιχεί
+    "field__item":       "Κόστος",  # ή όποιο πεδίο αντιστοιχεί
     "badge badge-primary": "Θεματική κατηγορία",
+    "topics--teaser": "Θεματική κατηγορία",
 }
 
 DEFAULT_VALUES = {
     "Θεματική κατηγορία":     "Δεν βρέθηκε",
     "Επίπεδο δυσκολίας":     "Intermediate",
-    "Κόστος":                ["320$","430$"],
+    "Κόστος":                ["320$","430$","225$"],
     "Διάρκεια":              ["6 Weeks","3 Weeks"],
-    "Γλώσσα διδασκαλίας":   "English",
+    "Γλώσσα διδασκαλίας":   ["English","French"]
 }
 
 
@@ -92,6 +99,8 @@ def scrape_course(url: str, classes: list) -> dict:
         data["Πάροχος / Πανεπιστήμιο"] = "Harvard University"
     elif "https://online.yale.edu" in url:
         data["Πάροχος / Πανεπιστήμιο"] = "Yale University"
+    elif "https://www.tuni.fi" in url:
+        data["Πάροχος / Πανεπιστήμιο"]= "Open University"
     else:
         data["Πάροχος / Πανεπιστήμιο"] = "Άγνωστος Πάροχος"
 
@@ -99,7 +108,7 @@ def scrape_course(url: str, classes: list) -> dict:
     for labels, greek_col in FIELD_MAP.items():
         labels = (labels,) if isinstance(labels, str) else labels  # αν είναι string, το κάνει tuple
         for eng_label in labels:
-            tag = soup.find(string=re.compile(eng_label))
+            tag = soup.find(string=re.compile(eng_label,re.IGNORECASE))
             if tag:
                 parent = tag.find_parent()
                 sibling = parent.find_next_sibling() if parent else None
@@ -109,19 +118,15 @@ def scrape_course(url: str, classes: list) -> dict:
 
     # 4. Scrape συγκεκριμένων classes για κάθε site
     for css_class in classes:
+        greek_col = CLASS_MAP.get(css_class)
+        if not greek_col:
+            continue
         items = soup.find_all(class_=css_class.split())
         if items:
             values = [item.get_text(strip=True) for item in items if item.get_text(strip=True)]
+            # Αν έχει ήδη τιμή από προηγούμενο class, προσθέτει με | διαχωριστή
+            data[greek_col] =values[0]
 
-            # Ψάχνει αν το css_class υπάρχει μέσα σε κάποιο tuple-κλειδί
-            greek_col = None
-            for labels, col in CLASS_MAP.items():
-                if css_class in labels:
-                    greek_col = col
-                    break
-
-            if greek_col:
-                data[greek_col] = " | ".join(values)
 
     for field, default in DEFAULT_VALUES.items():
         if not data[field]:
