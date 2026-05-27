@@ -11,11 +11,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SITES = [
     {
         "url": "https://pll.harvard.edu/course/using-python-research",
-        "classes": ["topics--teaser"],
+        "classes": ["topics--teaser","field__item"],
     },
     {
         "url": "https://pll.harvard.edu/course/cs50-lawyers",
-        "classes": ["topics--teaser"],
+        "classes": ["topics--teaser","field__item"],
     },
     {
         "url": "https://online.yale.edu/programs/foundations-animal-ethics",
@@ -28,7 +28,7 @@ SITES = [
 
     {
         "url": "https://www.tuni.fi/en/tau/open-university/course-offering/5g-mobile-communications",
-        "classes": ["field__item", "badge badge-primary"],
+        "classes": ["badge badge-primary"],
     },
 
 ]
@@ -54,6 +54,7 @@ CLASS_MAP = {
     "field__item":       "Κόστος",  # ή όποιο πεδίο αντιστοιχεί
     "badge badge-primary": "Θεματική κατηγορία",
     "topics--teaser": "Θεματική κατηγορία",
+    "field__item": "Επίπεδο δυσκολίας"
 }
 
 DEFAULT_VALUES = {
@@ -121,11 +122,18 @@ def scrape_course(url: str, classes: list) -> dict:
         greek_col = CLASS_MAP.get(css_class)
         if not greek_col:
             continue
-        items = soup.find_all(class_=css_class.split())
-        if items:
-            values = [item.get_text(strip=True) for item in items if item.get_text(strip=True)]
-            # Αν έχει ήδη τιμή από προηγούμενο class, προσθέτει με | διαχωριστή
-            data[greek_col] =values[0]
+        if css_class == "field__item":
+            difficulty_block = soup.find("div", class_=lambda c: c and "field--name-field-difficulty" in c)
+            if difficulty_block:
+                item = difficulty_block.find(class_="field__item")
+                if item:
+                    data[greek_col] = item.get_text(strip=True)
+        else:
+            # Για Yale (badge badge-primary) και άλλα classes: παίρνουμε το πρώτο
+            items = soup.find_all(class_=css_class.split())
+            if items:
+                values = [i.get_text(strip=True) for i in items if i.get_text(strip=True)]
+                data[greek_col] = values[0]
 
 
     for field, default in DEFAULT_VALUES.items():
