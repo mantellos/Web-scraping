@@ -16,8 +16,7 @@ def fetch_scrape():
     script_path = os.path.join(os.path.dirname(__file__), "Scraping.py")
     subprocess.Popen(["python", script_path])
 
-def load_csv_to_table():
-    """Διαβάζει το CSV και γεμίζει τον πίνακα."""
+def load_csv_to_table(tree):
     filename = os.path.join(os.path.dirname(__file__), "courses_data.csv")
     try:
         with open(filename, encoding="utf-8-sig") as f:
@@ -27,28 +26,30 @@ def load_csv_to_table():
         if not rows:
             return
 
-        headers = [row[0] for row in rows]
+        # Στήλες = 1η γραμμή (τίτλοι μαθημάτων)
+        headers = [row[0] for row in rows[1:]]  # πεδία
+        titles  = rows[0][1:]                   # τίτλοι μαθημάτων
 
+        # Ορισμός στηλών στον πίνακα
         tree["columns"] = headers
         tree["show"] = "headings"
-
         for h in headers:
             tree.heading(h, text=h)
             tree.column(h, width=160, anchor="center")
 
+        # Καθαρισμός και εισαγωγή δεδομένων
         tree.delete(*tree.get_children())
-
-        num_courses = len(rows[0]) - 1
-        for i in range(num_courses):
-            row_values = [rows[j][i + 1] for j in range(len(rows))]
+        for i in range(len(titles)):
+            row_values = [rows[j + 1][i + 1] for j in range(len(headers))]
             tree.insert("", "end", values=row_values)
 
     except FileNotFoundError:
         print(f"Δεν βρέθηκε το αρχείο: {filename}")
+    except Exception as e:
+        print(f"Σφάλμα: {e}")
 
 
 def load_csv_data():
-    """Φορτώνει τα δεδομένα από το CSV και επιστρέφει λίστα με dicts."""
     filename = os.path.join(os.path.dirname(__file__), "courses_data.csv")
     courses = []
     try:
@@ -59,17 +60,21 @@ def load_csv_data():
         if not rows:
             return courses
 
-        # Η 1η στήλη είναι τα ονόματα πεδίων
-        fields = [row[0] for row in rows]
-        num_courses = len(rows[0]) - 1
+        fields = [row[0] for row in rows[1:]]
+        titles = rows[0][1:]
 
-        for i in range(num_courses):
-            course = {fields[j]: rows[j][i + 1] for j in range(len(fields))}
+        for i, title in enumerate(titles):
+            course = {"Τίτλος μαθήματος": title}
+            for j, field in enumerate(fields):
+                course[field] = rows[j + 1][i + 1]
             courses.append(course)
 
     except FileNotFoundError:
         print("Δεν βρέθηκε το αρχείο CSV")
-    return courses
+    except Exception as e:
+        print(f"Σφάλμα: {e}")
+
+    return courses  # 👈 εξω από το try/except
 
 
 def normalize_difficulty(value):
@@ -93,13 +98,20 @@ def normalize_cost(value):
 
 def normalize_category(value):
     """Κανονικοποίηση κατηγορίας — παίρνει την 1η αν υπάρχουν πολλές."""
-    v = value.strip()
-    # Αν έχει πολλές κατηγορίες συνενωμένες, παίρνουμε την πρώτη
-    for keyword in ["Computer Science", "Data Processing", "Health & Medicine",
-                    "Finance", "Philosofy", "Engineering"]:
-        if keyword in v:
-            return keyword
-    return v if v else "Άγνωστο"
+    v = value.strip().lower()
+    if "computer science" in v:
+        return "Computer Science"
+    elif "data processing" in v or "data science" in v:
+        return "Data Processing"
+    elif "health" in v:
+        return "Health & Medicine"
+    elif "finance" in v:
+        return "Finance"
+    elif "philosof" in v:  # 👈 philosofy ή philosophy
+        return "Philosophy"
+    elif "engineering" in v:
+        return "Engineering"
+    return value.strip() if value.strip() else "Άγνωστο"
 
 
 def apply_filters(combo_category, combo_difficulty, combo_cost,all_courses,headers):
@@ -107,11 +119,11 @@ def apply_filters(combo_category, combo_difficulty, combo_cost,all_courses,heade
     sel_category   = combo_category.get()
     sel_difficulty = combo_difficulty.get()
     sel_cost       = combo_cost.get()
-
+    print(f"Επιλογές: cat={sel_category} | diff={sel_difficulty} | cost={sel_cost}")
     clean_headers = [h for h in headers if h != "Πεδίο"]
 
     tree.delete(*tree.get_children())
-    print(all_courses[0])
+    #print(all_courses[0])
     # Φτιάξε τις στήλες αν δεν υπάρχουν
     if not tree["columns"]:
         tree["columns"] = headers
@@ -125,7 +137,7 @@ def apply_filters(combo_category, combo_difficulty, combo_cost,all_courses,heade
         diff = normalize_difficulty(course.get("Επίπεδο δυσκολίας", ""))
         cost = normalize_cost(course.get("Κόστος", ""))
 
-        print(f"cat={cat} | diff={diff} | cost={cost}")
+        #print(f"cat={cat} | diff={diff} | cost={cost}")
         # Αν η επιλογή είναι "Όλα" ή ταιριάζει → εμφάνισε
         if (sel_category   in ("Όλα", cat) and
             sel_difficulty in ("Όλα", diff) and
@@ -172,7 +184,9 @@ def open_filter_window():
     combo_cost.grid(row=0, column=5, padx=5)
 
     # Κουμπί εφαρμογής φίλτρων
-    btn_filter = tk.Button(filter_frame, text="🔍 Φίλτρο", font=("Arial", 11), command=apply_filters(combo_category, combo_difficulty, combo_cost,all_courses, headers))
+    btn_filter = tk.Button(filter_frame, text="🔍 Φίλτρο", font=("Arial", 11),
+                           command=lambda: apply_filters(combo_category, combo_difficulty, combo_cost, all_courses,
+                                                         headers))
     btn_filter.grid(row=0, column=6, padx=15)
 
 
@@ -217,7 +231,8 @@ btn_api.pack(side=tk.LEFT, padx=40) # Το padx=20 βάζει κενό ΑΝΑΜ�
 btn_scrape = tk.Button(button_frame, text="Συλλογή μέσω Scraping", width=20, font=("Arial", 12), command=fetch_scrape)
 btn_scrape.pack(side=tk.LEFT, padx=40)
 
-btn_load = tk.Button(root, text="Φόρτωση Δεδομένων", font=("Arial", 11), command=load_csv_to_table)
+btn_load = tk.Button(root, text="Φόρτωση Δεδομένων", font=("Arial", 11),
+                     command=lambda: load_csv_to_table(tree))
 btn_load.pack(pady=30)
 
 btn_open_filters = tk.Button(root, text="🔍 Φίλτρα", font=("Arial", 12), command=open_filter_window)
