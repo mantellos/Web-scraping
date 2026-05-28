@@ -146,28 +146,57 @@ def scrape_course(url: str, classes: list) -> dict:
     return data
 
 
+def read_existing_csv(csv_file: str) -> tuple:
+    """Διαβάζει το υπάρχον CSV και επιστρέφει (τίτλους, γραμμές) αν υπάρχει."""
+    import os
+    if not (os.path.isfile(csv_file) and os.path.getsize(csv_file) > 0):
+        return [], {}
+
+    with open(csv_file, mode="r", newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.reader(f))
+
+    if not rows:
+        return [], {}
+
+    existing_titles = rows[0][1:]
+    existing_rows = {row[0]: row[1:] for row in rows[1:] if row}
+    return existing_titles, existing_rows
+
+
 def save_to_csv(all_courses: list, output_file: str):
-    """Αποθηκεύει τα δεδομένα σε CSV, όπου κάθε γραμμή είναι ένα πεδίο και κάθε στήλη ένα μάθημα."""
-    # Συλλογή όλων των μοναδικών κλειδιών με τη σειρά εμφάνισης
+    """Προσθέτει τα νέα μαθήματα δεξιά στο υπάρχον CSV χωρίς να διαγράψει τα υπάρχοντα."""
+    # 1. Συλλογή όλων των μοναδικών κλειδιών
     all_keys = []
     for course in all_courses:
         for k in course:
             if k not in all_keys:
                 all_keys.append(k)
 
+    # 2. Συμπλήρωση κενών
+    for course in all_courses:
+        for key in all_keys:
+            if key not in course or course[key] == "" or course[key] is None:
+                course[key] = "Μη διαθέσιμο"
+
+    # 3. Διάβασμα υπάρχοντος CSV
+    existing_titles, existing_rows = read_existing_csv(output_file)
+
+    # 4. Συνδυασμός παλιών + νέων τίτλων
+    new_titles = [c.get("Τίτλος μαθήματος", f"Μάθημα {i + 1}") for i, c in enumerate(all_courses)]
+    all_titles = existing_titles + new_titles
+
+    # 5. Αποθήκευση
     with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
 
-        # Header: "Πεδίο" + τίτλος κάθε μαθήματος
-        titles = [c.get("Τίτλος μαθήματος", f"Μάθημα {i+1}") for i, c in enumerate(all_courses)]
-        writer.writerow(["Πεδίο"] + titles)
+        writer.writerow(["Πεδίο"] + all_titles)
 
-        # Γραμμές δεδομένων (εξαιρούμε τον τίτλο γιατί είναι ήδη στο header)
         for key in all_keys:
             if key == "Τίτλος μαθήματος":
                 continue
-            row = [key] + [course.get(key, "") for course in all_courses]
-            writer.writerow(row)
+            old_values = existing_rows.get(key, [""] * len(existing_titles))
+            new_values = [course[key] for course in all_courses]
+            writer.writerow([key] + old_values + new_values)
 
 
 def main():
