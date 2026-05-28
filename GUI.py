@@ -6,6 +6,8 @@ import csv
 import math
 import re
 
+from graphs import open_graphs_window
+
 venv_python = os.path.join(os.path.dirname(__file__), "venv", "Scripts", "python.exe")
 
 WEIGHTS = {
@@ -175,7 +177,7 @@ def load_csv_data():
     except Exception as e:
         print(f"Σφάλμα: {e}")
 
-    return courses  # 👈 εξω από το try/except
+    return courses
 
 
 def normalize_difficulty(value):
@@ -192,32 +194,11 @@ def normalize_difficulty(value):
     print(f">>> Επιστρέφω Άγνωστο για '{v}'")
     return "Άγνωστο"
 
-def get_max_cost(all_courses):
-    """Βρίσκει το μέγιστο κόστος από τα δεδομένα."""
-    max_cost = 0
-    for c in all_courses:
-        value = c.get("Κόστος", "").strip().replace("$", "").replace(" ", "")
-        try:
-            cost = float(value)
-            if cost > max_cost:
-                max_cost = cost
-        except ValueError:
-            continue
-    return max_cost
-
-def normalize_cost(value,max_cost):
-    """Κανονικοποίηση κόστους σε Δωρεάν / Επί πληρωμή."""
-    v = value.strip().lower()
-    if "free" in v or v == "0":
-        return "Δωρεάν"
-    try:
-        cost = float(value.strip().replace("$", "").replace(" ", ""))
-        if cost == max_cost:
-            return f"{int(max_cost)}$"
-        return "Επί πληρωμή"
-    except ValueError:
-        return "Επί πληρωμή"
-
+def normalize_cost(value):
+    v = value.strip()
+    if not v:
+        return "Επι πληρωμή"
+    return v  # 👈 επιστρέφει την τιμή ως έχει π.χ. "320$", "430$"
 
 def normalize_category(value):
     """Κανονικοποίηση κατηγορίας — παίρνει την 1η αν υπάρχουν πολλές."""
@@ -237,24 +218,25 @@ def normalize_category(value):
     return value.strip() if value.strip() else "Άγνωστο"
 
 
-def apply_filters(combo_category, combo_difficulty, combo_cost, combo_language, all_courses, headers):
+def apply_filters(combo_category, combo_difficulty, combo_cost, combo_language, all_courses, clean_headers):
     """Φιλτράρει τον πίνακα βάσει των επιλογών στα combobox."""
     sel_category   = combo_category.get()
     sel_difficulty = combo_difficulty.get()
     sel_cost       = combo_cost.get()
     sel_language = combo_language.get()
-    print(f"Επιλογές: cat={sel_category} | diff={sel_difficulty} | cost={sel_cost}")
-    clean_headers = [h for h in headers if h != "Πεδίο"]
+    #print(f"Επιλογές: cat={sel_category} | diff={sel_difficulty} | cost={sel_cost}")
+    clean_headers = [h for h in clean_headers if h != "Πεδίο"]
 
     tree.delete(*tree.get_children())
     #print(all_courses[0])
     # Φτιάξε τις στήλες αν δεν υπάρχουν
     if not tree["columns"]:
-        tree["columns"] = headers
+        tree["columns"] = clean_headers
         tree["show"] = "headings"
-        for h in headers:
+        for h in clean_headers:
             tree.heading(h, text=h)
             tree.column(h, width=160, anchor="center")
+
 
     for course in all_courses:
         cat  = normalize_category(course.get("Θεματική κατηγορία", ""))
@@ -269,8 +251,51 @@ def apply_filters(combo_category, combo_difficulty, combo_cost, combo_language, 
             sel_cost       in ("Όλα", cost) and
             sel_language in ("Όλα", lang)):
 
-            values = [course.get(h, "") for h in headers]
+            values = [course.get(h, "") for h in clean_headers]
             tree.insert("", "end", values=values)
+
+
+def export_csv():
+    """Εξάγει τα τρέχοντα δεδομένα του πίνακα σε νέο CSV αρχείο με επιλογή αποθήκευσης."""
+    from tkinter import filedialog
+    import datetime
+
+    all_courses = load_csv_data()
+    if not all_courses:
+        tk.messagebox.showwarning("Εξαγωγή", "Δεν υπάρχουν δεδομένα για εξαγωγή.\nΦορτώστε πρώτα το CSV.")
+        return
+
+    # Πρόταση ονόματος με timestamp
+
+    default_name = "data.csv"
+
+    filepath = filedialog.asksaveasfilename(
+        title="Αποθήκευση εξαγόμενου CSV",
+        initialfile=default_name,
+        defaultextension=".csv",
+        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+    )
+    if not filepath:
+        return  # Ο χρήστης έκλεισε το παράθυρο
+
+    try:
+        fields = [k for k in all_courses[0].keys() if k != "Τίτλος μαθήματος"]
+        titles = [c.get("Τίτλος μαθήματος", f"Μάθημα {i + 1}") for i, c in enumerate(all_courses)]
+
+        with open(filepath, mode="w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            # Header row: Πεδίο + τίτλοι μαθημάτων
+            writer.writerow(["Πεδίο"] + titles)
+            # Μία γραμμή ανά πεδίο
+            for field in fields:
+                row = [field] + [c.get(field, "") for c in all_courses]
+                writer.writerow(row)
+
+        tk.messagebox.showinfo("Εξαγωγή επιτυχής",
+                               f"Εξήχθησαν {len(all_courses)} μαθήματα.\n\nΑποθηκεύτηκε:\n{filepath}")
+    except Exception as e:
+        tk.messagebox.showerror("Σφάλμα εξαγωγής", f"Αποτυχία αποθήκευσης:\n{e}")
+
 
 def open_filter_window():
     """Ανοίγει pop-up παράθυρο με τα φίλτρα."""
@@ -288,8 +313,8 @@ def open_filter_window():
         return
     categories = ["Όλα"] + sorted(set(normalize_category(c.get("Θεματική κατηγορία", "")) for c in all_courses))
     difficulties = ["Όλα"] + sorted(set(normalize_difficulty(c.get("Επίπεδο δυσκολίας", "")) for c in all_courses))
-    max_cost = get_max_cost(all_courses)
-    costs = ["Όλα"] + sorted(set(normalize_cost(c.get("Κόστος", ""), max_cost) for c in all_courses))
+
+    costs = ["Όλα"] + sorted(set(normalize_cost(c.get("Κόστος", "")) for c in all_courses))
     languages = ["Όλα"] + sorted(set(c.get("Γλώσσα διδασκαλίας", "") for c in all_courses))
 
     filter_frame = tk.Frame(popup)
@@ -319,10 +344,11 @@ def open_filter_window():
     combo_cost.set("Όλα")
     combo_cost.grid(row=0, column=5, padx=5)
 
+    clean_headers = [h for h in headers if h != "Τίτλος μαθήματος"]
     # Κουμπί εφαρμογής φίλτρων
     btn_filter = tk.Button(filter_frame, text="🔍 Φίλτρο", font=("Arial", 11),
                            command=lambda: apply_filters(combo_category, combo_difficulty, combo_cost,combo_language, all_courses,
-                                                         headers))
+                                                         clean_headers))
     btn_filter.grid(row=0, column=8, padx=15)
 
 
@@ -346,7 +372,7 @@ def open_ranking_window():
 
     # ── Τίτλος ────────────────────────────────────────────────────────────────
     tk.Label(popup,
-             text="🏆  Κατάταξη Κορυφαίων Μαθημάτων",
+             text="  Κατάταξη Κορυφαίων Μαθημάτων",
              font=("Arial", 15, "bold")).pack(pady=(14, 2))
 
     # ── Επεξήγηση βαρών ───────────────────────────────────────────────────────
@@ -380,10 +406,10 @@ def open_ranking_window():
         tv.heading(col, text=col)
         tv.column(col, width=w, anchor="center")
 
-    medals = ["🥇", "🥈", "🥉"]
+
     for rank, course in enumerate(top3, start=1):
         tv.insert("", "end", values=(
-            f"{medals[rank - 1]} {rank}",
+            f" {rank}",
             course.get("Τίτλος μαθήματος", "—"),
             course.get("Κόστος", "—"),
             course.get("Διάρκεια", "—"),
@@ -413,7 +439,7 @@ def open_ranking_window():
 
         title_short = course.get("Τίτλος μαθήματος", "")[:38]
         text = (
-            f"{medals[rank - 1]} {title_short}  →  "
+            f" {title_short}  →  "
             f"Κόστος: {cost_n}  |  Διάρκεια: {dur_n}  |  "
             f"Επίπεδο: {diff_n}  |  Γλώσσα: {lang_n}   "
             f"[Score: {course['composite_score']:.1f}]"
@@ -475,10 +501,23 @@ btn_open_filters = tk.Button(root, text="🔍 Φίλτρα", font=("Arial", 12),
 btn_open_filters.pack(pady=30)
 
 
-btn_ranking = tk.Button(action_frame, text="🏆 Top-3 Κατάταξη",
+btn_ranking = tk.Button(action_frame, text=" Top-3 Κατάταξη",
                         font=("Arial", 12), bg="#FFD700", fg="black",
                         command=open_ranking_window)
 btn_ranking.pack(side=tk.LEFT, padx=15)
+#----
+csv_path = os.path.join(os.path.dirname(__file__), "courses_data.csv")
+btn_graphs = tk.Button(action_frame, text="📊 Γραφήματα",
+                       font=("Arial", 12), bg="#4361EE", fg="white",
+                       relief="flat",
+                       command=lambda: open_graphs_window(root, csv_path))
+btn_graphs.pack(side=tk.LEFT, padx=15)
+
+btn_export = tk.Button(action_frame, text="💾 Εξαγωγή CSV",
+                       font=("Arial", 12), bg="#2D9E6B", fg="white",
+                       relief="flat",
+                       command=export_csv)
+btn_export.pack(side=tk.LEFT, padx=15)
 
 #-Pinakas
 table_frame = tk.Frame(root)
