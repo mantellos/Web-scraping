@@ -46,24 +46,43 @@ def _parse_cost(value: str) -> float:
     return 0.0
 
 
+FIELD_ALIASES = {
+    "title": ["title", "Τίτλος μαθήματος"],
+    "provider": ["provider", "Πάροχος"],
+    "category": ["category", "Κατηγορία"],
+    "difficulty": ["difficulty", "Επίπεδο δυσκολίας", "Δυσκολία"],
+    "cost": ["cost", "Κόστος"],
+    "duration": ["duration", "Διάρκεια"],
+    "language": ["language", "Γλώσσα"],
+}
+
+
+def _get_field(course: dict, keys: list[str], default: str = "") -> str:
+    for key in keys:
+        if key in course and course[key] is not None:
+            value = str(course[key]).strip()
+            if value:
+                return value
+    return default
+
+
 def load_courses_from_csv(csv_file: str) -> list:
-    """Φορτώνει τα μαθήματα από CSV (column-oriented format)."""
+    """Φορτώνει τα μαθήματα από CSV row-based μορφής."""
     courses = []
     if not os.path.isfile(csv_file):
         return courses
     try:
-        with open(csv_file, encoding="utf-8-sig") as f:
-            rows = list(csv.reader(f))
-        if not rows:
-            return courses
-        fields = [row[0] for row in rows[1:]]
-        titles = rows[0][1:]
-        for i, title in enumerate(titles):
-            course = {"Τίτλος μαθήματος": title}
-            for j, field in enumerate(fields):
-                val = rows[j + 1][i + 1] if (j + 1 < len(rows) and i + 1 < len(rows[j + 1])) else ""
-                course[field] = val
-            courses.append(course)
+        with open(csv_file, encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if not row or not any((v or "").strip() for v in row.values()):
+                    continue
+                cleaned = {k.strip(): (v.strip() if v is not None else "") for k, v in row.items()}
+                course = {
+                    field: _get_field(cleaned, FIELD_ALIASES.get(field, [field]), "")
+                    for field in FIELD_ALIASES
+                }
+                courses.append(course)
     except Exception as e:
         print(f"Σφάλμα φόρτωσης CSV: {e}")
     return courses
@@ -75,9 +94,9 @@ def chart_bar_duration(ax, courses: list):
     """Bar Chart – 5 μαθήματα με τη μεγαλύτερη χρονική διάρκεια."""
     parsed = []
     for c in courses:
-        hours = _parse_duration_hours(c.get("Διάρκεια", ""))
+        hours = _parse_duration_hours(_get_field(c, ["duration", "Διάρκεια"], ""))
         if hours > 0:
-            title = c.get("Τίτλος μαθήματος", "Άγνωστο")
+            title = _get_field(c, ["title", "Τίτλος μαθήματος"], "Άγνωστο")
             short = title[:24] + "…" if len(title) > 24 else title
             parsed.append((short, hours))
 
@@ -118,7 +137,7 @@ def chart_pie_difficulty(ax, courses: list):
     }
     counts = Counter()
     for c in courses:
-        raw = c.get("Επίπεδο δυσκολίας", "").strip().lower()
+        raw = _get_field(c, ["difficulty", "Επίπεδο δυσκολίας", "Δυσκολία"], "").strip().lower()
         label = difficulty_map.get(raw, "Άλλο")
         counts[label] += 1
 
@@ -164,9 +183,9 @@ def chart_line_cost_duration(ax, courses: list):
     """Line Plot – Συσχέτιση Κόστους και Διάρκειας (Top-5 διάρκεια)."""
     parsed = []
     for c in courses:
-        hours = _parse_duration_hours(c.get("Διάρκεια", ""))
-        cost  = _parse_cost(c.get("Κόστος", ""))
-        title = c.get("Τίτλος μαθήματος", "")
+        hours = _parse_duration_hours(_get_field(c, ["duration", "Διάρκεια"], ""))
+        cost  = _parse_cost(_get_field(c, ["cost", "Κόστος"], ""))
+        title = _get_field(c, ["title", "Τίτλος μαθήματος"], "")
         if hours > 0:
             short = title[:18] + "…" if len(title) > 18 else title
             parsed.append((short, hours, cost))

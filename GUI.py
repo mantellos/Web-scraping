@@ -1,540 +1,267 @@
-import tkinter as tk
-from tkinter import ttk
-import subprocess
 import os
-import csv
-import math
-import re
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
 
+from data_processor import CourseRepository
+from ranking import rank_courses
 from graphs import open_graphs_window
+from web_api import fetch_api_data
+from Scraping import scrape_all_web_sources
 
-venv_python = os.path.join(os.path.dirname(__file__), "venv", "Scripts", "python.exe")
+BASE_DIR = os.path.dirname(__file__)
+CSV_FILE = os.path.join(BASE_DIR, "courses_data.csv")
+repository = CourseRepository(CSV_FILE)
 
-WEIGHTS = {
-    "Κόστος":             0.40,
-    "Διάρκεια":           0.30,
-    "Επίπεδο δυσκολίας":  0.20,
-    "Γλώσσα διδασκαλίας": 0.10,
+COLUMNS = [
+    "title",
+    "provider",
+    "category",
+    "difficulty",
+    "cost",
+    "duration",
+    "language",
+]
+
+COLUMN_LABELS = {
+    "title": "Τίτλος Μαθήματος",
+    "provider": "Πάροχος",
+    "category": "Κατηγορία",
+    "difficulty": "Δυσκολία",
+    "cost": "Κόστος",
+    "duration": "Διάρκεια",
+    "language": "Γλώσσα",
 }
 
 
-def _parse_cost(value: str):
-    if not value or not value.strip():
-        return None
-    v = value.strip().lower()
-    if v in ("free", "0", "δωρεάν"):
-        return 0.0
-    m = re.search(r"[\d,.]+", v)
-    if m:
-        return float(m.group().replace(",", "."))
-    return None
+def refresh_table(courses: list[dict]):
+    tree.delete(*tree.get_children())
+    for course in courses:
+        tree.insert("", "end", values=tuple(course.get(col, "") for col in COLUMNS))
 
 
-def _parse_duration_days(value: str):
-    if not value or not value.strip():
-        return None
-    v = value.strip().lower()
-    m_months = re.search(r"(\d+)\s*month", v)
-    m_weeks  = re.search(r"(\d+)\s*week",  v)
-    m_days   = re.search(r"(\d+)\s*day",   v)
-    if m_months:
-        return float(m_months.group(1)) * 30
-    if m_weeks:
-        return float(m_weeks.group(1)) * 7
-    if m_days:
-        return float(m_days.group(1))
-    return None
-
-def _parse_difficulty(value: str):
-    if not value or not value.strip():
-        return None
-    v = value.strip().lower()
-    if v in ("introductory", "beginner", "εύκολο"):
-        return 0.25
-    if v in ("intermediate", "medium", "transitional", "μέτριο"):
-        return 0.50
-    if v in ("advanced", "δύσκολο"):
-        return 1.00
-    return None
-
-
-def _parse_language(value: str):
-    if not value or not value.strip():
-        return None
-    return 1.0 if "english" in value.strip().lower() else 0.5
-
-
-def compute_score(course: dict) -> float:
-    """
-    Υπολογίζει composite score 0-100.
-    Ελλιπή πεδία: το βάρος τους αναδιανέμεται δυναμικά στα υπόλοιπα.
-    """
-    cost_raw = _parse_cost(course.get("Κόστος", ""))
-    dur_raw = _parse_duration_days(course.get("Διάρκεια", ""))
-    diff_raw = _parse_difficulty(course.get("Επίπεδο δυσκολίας", ""))
-    lang_raw = _parse_language(course.get("Γλώσσα διδασκαλίας", ""))
-
-    # Κανονικοποίηση κόστους: e^(-cost/200) → φθηνό = υψηλό score
-    cost_norm = math.exp(-cost_raw / 200.0) if cost_raw is not None else None
-    # Κανονικοποίηση διάρκειας: soft cap 180 ημέρες
-    dur_norm = min(dur_raw / 180.0, 1.0) if dur_raw is not None else None
-
-    raw = {
-        "Κόστος": cost_norm,
-        "Διάρκεια": dur_norm,
-        "Επίπεδο δυσκολίας": diff_raw,
-        "Γλώσσα διδασκαλίας": lang_raw,
-    }
-
-    available = {k: v for k, v in raw.items() if v is not None}
-    if not available:
-        return 0.0
-
-    total_weight = sum(WEIGHTS[k] for k in available)
-    score = sum(WEIGHTS[k] * v for k, v in available.items()) / total_weight
-    return round(score * 100, 2)
-
-
-def rank_courses(courses: list, top_n: int = 3) -> list:
-    """Επιστρέφει τα top_n μαθήματα ταξινομημένα κατά φθίνον composite score."""
-    scored = []
-    for c in courses:
-        c = dict(c)
-        c["composite_score"] = compute_score(c)
-        scored.append(c)
-    scored.sort(key=lambda x: x["composite_score"], reverse=True)
-    return scored[:top_n]
-
-
-#-----------------------
-#-----------------------
-
-def fetch_api():
-    print("Πατήθηκε η Συλλογή μέσω του API!")
-    script_path = os.path.join(os.path.dirname(__file__), "Web-Data-API.py")
-    subprocess.Popen(["python", script_path])
-
-def fetch_scrape():
-    print("Πατήθηκε η Συλλογή μέσω Scraping!")
-    script_path = os.path.join(os.path.dirname(__file__), "Scraping.py")
-    subprocess.Popen(["python", script_path])
-
-def load_csv_to_table(tree):
-    filename = os.path.join(os.path.dirname(__file__), "courses_data.csv")
-    try:
-        with open(filename, encoding="utf-8-sig") as f:
-            reader = csv.reader(f)
-            rows = list(reader)
-
-        if not rows:
-            return
-
-        # Στήλες = 1η γραμμή (τίτλοι μαθημάτων)
-        headers = [row[0] for row in rows[1:]]  # πεδία
-        titles  = rows[0][1:]                   # τίτλοι μαθημάτων
-
-        # Ορισμός στηλών στον πίνακα
-        tree["columns"] = headers
-        tree["show"] = "headings"
-        for h in headers:
-            tree.heading(h, text=h)
-            tree.column(h, width=160, anchor="center")
-
-        # Καθαρισμός και εισαγωγή δεδομένων
-        tree.delete(*tree.get_children())
-        for i in range(len(titles)):
-            row_values = [rows[j + 1][i + 1] for j in range(len(headers))]
-            tree.insert("", "end", values=row_values)
-
-    except FileNotFoundError:
-        print(f"Δεν βρέθηκε το αρχείο: {filename}")
-    except Exception as e:
-        print(f"Σφάλμα: {e}")
-
-
-def load_csv_data():
-    filename = os.path.join(os.path.dirname(__file__), "courses_data.csv")
-    courses = []
-    try:
-        with open(filename, encoding="utf-8-sig") as f:
-            reader = csv.reader(f)
-            rows = list(reader)
-
-        if not rows:
-            return courses
-
-        fields = [row[0] for row in rows[1:]]
-        titles = rows[0][1:]
-
-        for i, title in enumerate(titles):
-            course = {"Τίτλος μαθήματος": title}
-            for j, field in enumerate(fields):
-                course[field] = rows[j + 1][i + 1]
-            courses.append(course)
-
-    except FileNotFoundError:
-        print("Δεν βρέθηκε το αρχείο CSV")
-    except Exception as e:
-        print(f"Σφάλμα: {e}")
-
+def load_courses():
+    courses = repository.load_courses()
+    refresh_table(courses)
     return courses
 
 
-def normalize_difficulty(value):
-    """Κανονικοποίηση δυσκολίας σε Εύκολο / Μέτριο / Δύσκολο."""
-    v = value.strip().lower()
-    if v in ["introductory", "beginner"]:
-        print(f">>> Εύκολο για '{v}'")
-        return "Εύκολο"
-    elif v in ["intermediate", "transitional", "medium"]:  # 👈 προστέθηκαν
-        print(f">>> Μέτριο για '{v}'")
-        return "Μέτριο"
-    elif v in ["advanced"]:
-        return "Δύσκολο"
-    print(f">>> Επιστρέφω Άγνωστο για '{v}'")
-    return "Άγνωστο"
-
-def normalize_cost(value):
-    v = value.strip()
-    if not v:
-        return "Επι πληρωμή"
-    return v  # 👈 επιστρέφει την τιμή ως έχει π.χ. "320$", "430$"
-
-def normalize_category(value):
-    """Κανονικοποίηση κατηγορίας — παίρνει την 1η αν υπάρχουν πολλές."""
-    v = value.strip().lower()
-    if "computer science" in v:
-        return "Computer Science"
-    elif "data processing" in v or "data science" in v:
-        return "Data Processing"
-    elif "health" in v:
-        return "Health & Medicine"
-    elif "finance" in v:
-        return "Finance"
-    elif "philosof" in v:  # 👈 philosofy ή philosophy
-        return "Philosophy"
-    elif "engineering" in v:
-        return "Engineering"
-    return value.strip() if value.strip() else "Άγνωστο"
+def run_api_pipeline():
+    courses = fetch_api_data()
+    if not courses:
+        messagebox.showwarning("API", "Δεν βρέθηκαν δεδομένα από το API.")
+        return
+    added = repository.append_courses(courses)
+    load_courses()
+    messagebox.showinfo("API", f"Προστέθηκαν {added} νέα μαθήματα από το API.")
 
 
-def apply_filters(combo_category, combo_difficulty, combo_cost, combo_language, all_courses, clean_headers):
-    """Φιλτράρει τον πίνακα βάσει των επιλογών στα combobox."""
-    sel_category   = combo_category.get()
-    sel_difficulty = combo_difficulty.get()
-    sel_cost       = combo_cost.get()
-    sel_language = combo_language.get()
-    #print(f"Επιλογές: cat={sel_category} | diff={sel_difficulty} | cost={sel_cost}")
-    clean_headers = [h for h in clean_headers if h != "Πεδίο"]
-
-    tree.delete(*tree.get_children())
-    #print(all_courses[0])
-    # Φτιάξε τις στήλες αν δεν υπάρχουν
-    if not tree["columns"]:
-        tree["columns"] = clean_headers
-        tree["show"] = "headings"
-        for h in clean_headers:
-            tree.heading(h, text=h)
-            tree.column(h, width=160, anchor="center")
-
-
-    for course in all_courses:
-        cat  = normalize_category(course.get("Θεματική κατηγορία", ""))
-        diff = normalize_difficulty(course.get("Επίπεδο δυσκολίας", ""))
-        cost = normalize_cost(course.get("Κόστος", ""))
-        lang = course.get("Γλώσσα διδασκαλίας", "")
-
-        #print(f"cat={cat} | diff={diff} | cost={cost}")
-        # Αν η επιλογή είναι "Όλα" ή ταιριάζει → εμφάνισε
-        if (sel_category   in ("Όλα", cat) and
-            sel_difficulty in ("Όλα", diff) and
-            sel_cost       in ("Όλα", cost) and
-            sel_language in ("Όλα", lang)):
-
-            values = [course.get(h, "") for h in clean_headers]
-            tree.insert("", "end", values=values)
+def run_scraping_pipeline():
+    courses = scrape_all_web_sources()
+    if not courses:
+        messagebox.showwarning("Scraping", "Δεν βρέθηκαν δεδομένα κατά το scraping.")
+        return
+    added = repository.append_courses(courses)
+    load_courses()
+    messagebox.showinfo("Scraping", f"Προστέθηκαν {added} νέα μαθήματα μετά το scraping.")
 
 
 def export_csv():
-    """Εξάγει τα τρέχοντα δεδομένα του πίνακα σε νέο CSV αρχείο με επιλογή αποθήκευσης."""
-    from tkinter import filedialog
-    import datetime
-
-    all_courses = load_csv_data()
-    if not all_courses:
-        tk.messagebox.showwarning("Εξαγωγή", "Δεν υπάρχουν δεδομένα για εξαγωγή.\nΦορτώστε πρώτα το CSV.")
+    courses = repository.load_courses()
+    if not courses:
+        messagebox.showwarning("Εξαγωγή", "Δεν υπάρχουν δεδομένα για εξαγωγή.")
         return
-
-    # Πρόταση ονόματος με timestamp
-
-    default_name = "data.csv"
-
     filepath = filedialog.asksaveasfilename(
-        title="Αποθήκευση εξαγόμενου CSV",
-        initialfile=default_name,
+        title="Αποθήκευση CSV",
         defaultextension=".csv",
-        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")]
+        filetypes=[("CSV", "*.csv"), ("All Files", "*")],
     )
     if not filepath:
-        return  # Ο χρήστης έκλεισε το παράθυρο
-
-    try:
-        fields = [k for k in all_courses[0].keys() if k != "Τίτλος μαθήματος"]
-        titles = [c.get("Τίτλος μαθήματος", f"Μάθημα {i + 1}") for i, c in enumerate(all_courses)]
-
-        with open(filepath, mode="w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f)
-            # Header row: Πεδίο + τίτλοι μαθημάτων
-            writer.writerow(["Πεδίο"] + titles)
-            # Μία γραμμή ανά πεδίο
-            for field in fields:
-                row = [field] + [c.get(field, "") for c in all_courses]
-                writer.writerow(row)
-
-        tk.messagebox.showinfo("Εξαγωγή επιτυχής",
-                               f"Εξήχθησαν {len(all_courses)} μαθήματα.\n\nΑποθηκεύτηκε:\n{filepath}")
-    except Exception as e:
-        tk.messagebox.showerror("Σφάλμα εξαγωγής", f"Αποτυχία αποθήκευσης:\n{e}")
+        return
+    repository.export_courses(filepath, courses)
+    messagebox.showinfo("Εξαγωγή", f"Το αρχείο αποθηκεύτηκε:\n{filepath}")
 
 
 def open_filter_window():
-    """Ανοίγει pop-up παράθυρο με τα φίλτρα."""
+    courses = repository.load_courses()
+    if not courses:
+        messagebox.showinfo("Φίλτρα", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
+        return
+
     popup = tk.Toplevel(root)
     popup.title("Φίλτρα Αναζήτησης")
-    popup.geometry("1000x500")
-    popup.resizable(False, False)
+    popup.geometry("1040x560")
+    popup.resizable(True, True)
 
-    all_courses = load_csv_data()
-    for c in all_courses:
-        print(c.get("Επίπεδο δυσκολίας", ""))
-    headers = list(all_courses[0].keys()) if all_courses else []
-    if not all_courses:
-        tk.Label(popup, text=" Δεν βρέθηκαν δεδομένα!", font=("Arial", 12)).pack(pady=20)
-        return
-    categories = ["Όλα"] + sorted(set(normalize_category(c.get("Θεματική κατηγορία", "")) for c in all_courses))
-    difficulties = ["Όλα"] + sorted(set(normalize_difficulty(c.get("Επίπεδο δυσκολίας", "")) for c in all_courses))
+    values = {
+        "category": ["Όλα"] + sorted({course.get("category", "Unknown") for course in courses}),
+        "difficulty": ["Όλα"] + sorted({course.get("difficulty", "Unknown") for course in courses}),
+        "cost": ["Όλα"] + sorted({course.get("cost", "Άγνωστο") for course in courses}),
+        "language": ["Όλα"] + sorted({course.get("language", "Unknown") for course in courses}),
+    }
 
-    costs = ["Όλα"] + sorted(set(normalize_cost(c.get("Κόστος", "")) for c in all_courses))
-    languages = ["Όλα"] + sorted(set(c.get("Γλώσσα διδασκαλίας", "") for c in all_courses))
+    control_frame = tk.Frame(popup)
+    control_frame.pack(fill="x", padx=14, pady=12)
+
+    labels = ["Κατηγορία", "Δυσκολία", "Κόστος", "Γλώσσα"]
+    keys = ["category", "difficulty", "cost", "language"]
+    combos = {}
+
+    for index, key in enumerate(keys):
+        tk.Label(control_frame, text=labels[index] + ":", font=("Arial", 10)).grid(row=0, column=index * 2, padx=6, pady=6, sticky="e")
+        combo = ttk.Combobox(control_frame, values=values[key], state="readonly", width=24)
+        combo.set(values[key][0])
+        combo.grid(row=0, column=index * 2 + 1, padx=6, pady=6)
+        combos[key] = combo
 
     filter_frame = tk.Frame(popup)
-    filter_frame.pack(pady=20,padx=10)
+    filter_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-    # Κατηγορία
-    tk.Label(filter_frame, text="Κατηγορία:", font=("Arial", 11)).grid(row=0, column=0, padx=5)
-    combo_category = ttk.Combobox(filter_frame, values=categories, state="readonly", width=18)
-    combo_category.set("Όλα")
-    combo_category.grid(row=0, column=1, padx=5)
+    filter_tree = ttk.Treeview(filter_frame, columns=COLUMNS, show="headings")
+    vsb = ttk.Scrollbar(filter_frame, orient="vertical", command=filter_tree.yview)
+    hsb = ttk.Scrollbar(filter_frame, orient="horizontal", command=filter_tree.xview)
+    filter_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+    vsb.pack(side="right", fill="y")
+    hsb.pack(side="bottom", fill="x")
+    filter_tree.pack(fill="both", expand=True)
 
-    # Δυσκολία
-    tk.Label(filter_frame, text="Δυσκολία:", font=("Arial", 11)).grid(row=0, column=2, padx=5)
-    combo_difficulty = ttk.Combobox(filter_frame, values=difficulties, state="readonly", width=18)
-    combo_difficulty.set("Όλα")
-    combo_difficulty.grid(row=0, column=3, padx=5)
+    for col in COLUMNS:
+        filter_tree.heading(col, text=COLUMN_LABELS[col])
+        filter_tree.column(col, width=130, anchor="w")
 
-    # Γλώσσα
-    tk.Label(filter_frame, text="Γλώσσα:", font=("Arial", 11)).grid(row=0, column=6, padx=5)
-    combo_language = ttk.Combobox(filter_frame, values=languages, state="readonly", width=18)
-    combo_language.set("Όλα")
-    combo_language.grid(row=0, column=7, padx=5)
+    def apply_filters():
+        selected = {key: combos[key].get() for key in keys}
+        filtered = []
+        for course in courses:
+            if (selected["category"] in ("Όλα", course.get("category", ""))
+                    and selected["difficulty"] in ("Όλα", course.get("difficulty", ""))
+                    and selected["cost"] in ("Όλα", course.get("cost", ""))
+                    and selected["language"] in ("Όλα", course.get("language", ""))):
+                filtered.append(course)
+        filter_tree.delete(*filter_tree.get_children())
+        for course in filtered:
+            filter_tree.insert("", "end", values=tuple(course.get(col, "") for col in COLUMNS))
 
-    # Κόστος
-    tk.Label(filter_frame, text="Κόστος:", font=("Arial", 11)).grid(row=0, column=4, padx=5)
-    combo_cost = ttk.Combobox(filter_frame, values=costs, state="readonly", width=18)
-    combo_cost.set("Όλα")
-    combo_cost.grid(row=0, column=5, padx=5)
-
-    clean_headers = [h for h in headers if h != "Τίτλος μαθήματος"]
-    # Κουμπί εφαρμογής φίλτρων
-    btn_filter = tk.Button(filter_frame, text="🔍 Φίλτρο", font=("Arial", 11),
-                           command=lambda: apply_filters(combo_category, combo_difficulty, combo_cost,combo_language, all_courses,
-                                                         clean_headers))
-    btn_filter.grid(row=0, column=8, padx=15)
+    apply_button = tk.Button(control_frame, text="Φίλτρο", command=apply_filters, font=("Arial", 10, "bold"))
+    apply_button.grid(row=0, column=8, padx=12, pady=6)
+    apply_filters()
 
 
 def open_ranking_window():
-    """
-    Ανοίγει παράθυρο που εμφανίζει τα 3 κορυφαία μαθήματα
-    βάσει composite score (Κόστος 40% | Διάρκεια 30% | Επίπεδο 20% | Γλώσσα 10%).
-    Χειρίζεται ελλιπή δεδομένα δυναμικά.
-    """
-    all_courses = load_csv_data()
-    if not all_courses:
-        tk.messagebox.showinfo("Κατάταξη", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
+    courses = repository.load_courses()
+    if not courses:
+        messagebox.showinfo("Κατάταξη", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
         return
 
-    top3 = rank_courses(all_courses, top_n=3)
-
+    top_courses = rank_courses(courses, top_n=3)
     popup = tk.Toplevel(root)
-    popup.title("Top-3 Μαθήματα – Composite Score")
+    popup.title("Top 3 Μαθήματα")
     popup.geometry("860x520")
     popup.resizable(True, True)
 
-    # ── Τίτλος ────────────────────────────────────────────────────────────────
-    tk.Label(popup,
-             text="  Κατάταξη Κορυφαίων Μαθημάτων",
-             font=("Arial", 15, "bold")).pack(pady=(14, 2))
+    heading = tk.Label(popup, text="Top 3 Μαθήματα", font=("Arial", 14, "bold"))
+    heading.pack(pady=12)
 
-    # ── Επεξήγηση βαρών ───────────────────────────────────────────────────────
-    info = (
-        "Composite Score  =  Κόστος × 40%  +  Διάρκεια × 30%  +  "
-        "Επίπεδο × 20%  +  Γλώσσα × 10%\n"
-        "Ελλιπή πεδία αντιμετωπίζονται δυναμικά (αναδιανομή βαρών)."
-    )
-    tk.Label(popup, text=info, font=("Consolas", 9), fg="gray40",
-             justify="center").pack(pady=(0, 10))
+    columns = ("rank", "title", "provider", "category", "difficulty", "cost", "duration", "language", "score")
+    tree_frame = tk.Frame(popup)
+    tree_frame.pack(fill="both", expand=True, padx=12, pady=8)
+    ranking_tree = ttk.Treeview(tree_frame, columns=columns, show="headings")
+    ranking_tree.pack(side="left", fill="both", expand=True)
+    scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=ranking_tree.yview)
+    scrollbar.pack(side="right", fill="y")
+    ranking_tree.configure(yscrollcommand=scrollbar.set)
 
-    # ── Πίνακας αποτελεσμάτων ─────────────────────────────────────────────────
-    cols = ("Θέση", "Τίτλος μαθήματος", "Κόστος", "Διάρκεια",
-            "Επίπεδο", "Γλώσσα", "Score")
-    widths = (50, 240, 90, 90, 110, 90, 70)
+    headings = {
+        "rank": "Θέση",
+        "title": "Τίτλος",
+        "provider": "Πάροχος",
+        "category": "Κατηγορία",
+        "difficulty": "Δυσκολία",
+        "cost": "Κόστος",
+        "duration": "Διάρκεια",
+        "language": "Γλώσσα",
+        "score": "Score",
+    }
+    widths = {key: 100 for key in columns}
+    widths["title"] = 220
+    widths["provider"] = 120
+    widths["score"] = 80
 
-    frame = tk.Frame(popup)
-    frame.pack(fill="both", expand=True, padx=18, pady=6)
-
-    sv = tk.Scrollbar(frame, orient="vertical")
-    sh = tk.Scrollbar(frame, orient="horizontal")
-    tv = ttk.Treeview(frame, columns=cols, show="headings",
-                      yscrollcommand=sv.set, xscrollcommand=sh.set)
-    sv.config(command=tv.yview)
-    sh.config(command=tv.xview)
-    sv.pack(side="right", fill="y")
-    sh.pack(side="bottom", fill="x")
-    tv.pack(fill="both", expand=True)
-
-    for col, w in zip(cols, widths):
-        tv.heading(col, text=col)
-        tv.column(col, width=w, anchor="center")
-
-
-    for rank, course in enumerate(top3, start=1):
-        tv.insert("", "end", values=(
-            f" {rank}",
-            course.get("Τίτλος μαθήματος", "—"),
-            course.get("Κόστος", "—"),
-            course.get("Διάρκεια", "—"),
-            course.get("Επίπεδο δυσκολίας", "—"),
-            course.get("Γλώσσα διδασκαλίας", "—"),
-            f"{course['composite_score']:.1f} / 100",
+    for col in columns:
+        ranking_tree.heading(col, text=headings[col])
+        ranking_tree.column(col, width=widths[col], anchor="center")
+    for index, course in enumerate(top_courses, start=1):
+        ranking_tree.insert("", "end", values=(
+            index,
+            course.get("title", ""),
+            course.get("provider", ""),
+            course.get("category", ""),
+            course.get("difficulty", ""),
+            course.get("cost", ""),
+            course.get("duration", ""),
+            course.get("language", ""),
+            f"{course.get('composite_score', 0):.1f}",
         ))
 
-    # ── Ανάλυση score ανά μάθημα ──────────────────────────────────────────────
-    tk.Label(popup, text="Ανάλυση Composite Score",
-             font=("Arial", 11, "bold")).pack(pady=(8, 2))
 
-    detail_frame = tk.Frame(popup)
-    detail_frame.pack(fill="x", padx=18, pady=(0, 14))
-
-    for rank, course in enumerate(top3, start=1):
-        # Αναλυτική βαθμολογία ανά πεδίο
-        cost_raw = _parse_cost(course.get("Κόστος", ""))
-        dur_raw = _parse_duration_days(course.get("Διάρκεια", ""))
-        diff_raw = _parse_difficulty(course.get("Επίπεδο δυσκολίας", ""))
-        lang_raw = _parse_language(course.get("Γλώσσα διδασκαλίας", ""))
-
-        cost_n = f"{math.exp(-cost_raw / 200) * 100:.0f}" if cost_raw is not None else "N/A"
-        dur_n = f"{min(dur_raw / 180, 1) * 100:.0f}" if dur_raw is not None else "N/A"
-        diff_n = f"{diff_raw * 100:.0f}" if diff_raw is not None else "N/A"
-        lang_n = f"{lang_raw * 100:.0f}" if lang_raw is not None else "N/A"
-
-        title_short = course.get("Τίτλος μαθήματος", "")[:38]
-        text = (
-            f" {title_short}  →  "
-            f"Κόστος: {cost_n}  |  Διάρκεια: {dur_n}  |  "
-            f"Επίπεδο: {diff_n}  |  Γλώσσα: {lang_n}   "
-            f"[Score: {course['composite_score']:.1f}]"
-        )
-        tk.Label(detail_frame, text=text, font=("Consolas", 9),
-                 anchor="w", justify="left").pack(fill="x", pady=1)
-
-
-
-# 1. Δημιουργία κύριου παραθύρου
 root = tk.Tk()
-root.title("Information")
-root.geometry("1000x650")  # πλάτος x ύψος σε pixels
-# 2. Widgets (στοιχεία διεπαφής)
+root.title("Course Browser")
+root.geometry("1000x660")
 
-label = tk.Label(root, text="University Courses: ", font=("Arial", 20))
-label.pack(pady=10)
+header_frame = tk.Frame(root)
+header_frame.pack(fill="x", padx=20, pady=10)
 
-# 2. Φτιάχνουμε το "αόρατο κουτί" (Frame) για να μπουν τα στοιχεία δίπλα-δίπλα
+info_text = (
+    "Συμμετέχοντες | ΑΜ\n"
+    "Μιχαήλ Άγγελος Δημηρίδης | 1115538\n"
+    "Κωνσταντίνος Μαντέλλος   | 1119106\n"
+    "Θεοφάνης Τζεφρώνης       | 1115472"
+)
+left_label = tk.Label(header_frame, text=info_text, justify="left", font=("Consolas", 10))
+left_label.pack(side="left")
 
-content_frame = tk.Frame(root)
-content_frame.pack(anchor="w", padx=20)
+right_label = tk.Label(header_frame, text="Τμήμα Μηχανικών Η/Υ και Πληροφορικής\nΠανεπιστήμιο Πατρών", justify="right", font=("Arial", 11, "bold"))
+right_label.pack(side="right")
 
-lista_mathiton = """Συμμετέχοντες | Αριθμός Μητρώου |
---------------|-------------------|
-Μιχαήλ Άγγελος Δημηρίδης | 1115538|
-Κωνσταντίνος Μαντέλλος   | 1119106|
-Θεοφάνης Τζεφρώνης       | 1115472|"""
-
-left_label = tk.Label(content_frame, text=lista_mathiton, justify="left", font=("Consolas", 10))
-# Το κολλάμε στα ΑΡΙΣΤΕΡΑ του αόρατου κουτιού
-left_label.pack(side=tk.LEFT)
-
-right_label = tk.Label(content_frame, text="Τμήμα Μηχανικών Η/Υ και Πληροφορικής\n Πανεπιστήμιο Πατρών", justify="left", fg="black",font=("Arial", 12, "bold"))
-# Το padx=50 του δίνει μια απόσταση 50 pixels από τη λίστα για να μην κολλάνε
-right_label.pack(side=tk.LEFT, padx=50)
-
-# 4. Δημιουργία νέου Frame ΜΟΝΟ για τα κουμπιά
 button_frame = tk.Frame(root)
-# Το expand=True λέει στο Frame να απλωθεί και να πιάσει όλο τον διαθέσιμο κενό χώρο, κεντράροντας τα περιεχόμενά του!
-button_frame.pack(pady=50)
+button_frame.pack(fill="x", padx=20, pady=10)
 
-# Δημιουργία των κουμπιών (τα βάζουμε μέσα στο button_frame)
-# Πρόσθεσα λίγο πλάτος (width) και γραμματοσειρά (font) για να φαίνονται πιο ωραία, μπορείς να τα αλλάξεις.
-btn_api = tk.Button(button_frame, text="Συλλογή μέσω API", width=20, font=("Arial", 12), command=fetch_api)
-btn_api.pack(side=tk.LEFT, padx=40) # Το padx=20 βάζει κενό ΑΝΑΜΕΣΑ στα κουμπιά
+btn_api = tk.Button(button_frame, text="Συλλογή μέσω API", command=run_api_pipeline, width=20, bg="#27ae60", fg="white")
+btn_api.pack(side="left", padx=6)
 
-btn_scrape = tk.Button(button_frame, text="Συλλογή μέσω Scraping", width=20, font=("Arial", 12), command=fetch_scrape)
-btn_scrape.pack(side=tk.LEFT, padx=40)
+btn_scrape = tk.Button(button_frame, text="Συλλογή μέσω Scraping", command=run_scraping_pipeline, width=20, bg="#2980b9", fg="white")
+btn_scrape.pack(side="left", padx=6)
 
-action_frame = tk.Frame(root)
-action_frame.pack(pady=10)
+btn_load = tk.Button(button_frame, text="Φόρτωση Δεδομένων", command=load_courses, width=18)
+btn_load.pack(side="left", padx=6)
 
-btn_load = tk.Button(root, text="Φόρτωση Δεδομένων", font=("Arial", 11),
-                     command=lambda: load_csv_to_table(tree))
-btn_load.pack(pady=30)
+btn_filters = tk.Button(button_frame, text="Φίλτρα", command=open_filter_window, width=12)
+btn_filters.pack(side="left", padx=6)
 
-btn_open_filters = tk.Button(root, text="🔍 Φίλτρα", font=("Arial", 12), command=open_filter_window)
-btn_open_filters.pack(pady=30)
+btn_ranking = tk.Button(button_frame, text="Top-3", command=open_ranking_window, width=12, bg="#f1c40f")
+btn_ranking.pack(side="left", padx=6)
 
+btn_graphs = tk.Button(button_frame, text="Γραφήματα", command=lambda: open_graphs_window(root, CSV_FILE), width=12, bg="#8e44ad", fg="white")
+btn_graphs.pack(side="left", padx=6)
 
-btn_ranking = tk.Button(action_frame, text=" Top-3 Κατάταξη",
-                        font=("Arial", 12), bg="#FFD700", fg="black",
-                        command=open_ranking_window)
-btn_ranking.pack(side=tk.LEFT, padx=15)
-#----
-csv_path = os.path.join(os.path.dirname(__file__), "courses_data.csv")
-btn_graphs = tk.Button(action_frame, text="📊 Γραφήματα",
-                       font=("Arial", 12), bg="#4361EE", fg="white",
-                       relief="flat",
-                       command=lambda: open_graphs_window(root, csv_path))
-btn_graphs.pack(side=tk.LEFT, padx=15)
+btn_export = tk.Button(button_frame, text="Εξαγωγή CSV", command=export_csv, width=14, bg="#16a085", fg="white")
+btn_export.pack(side="left", padx=6)
 
-btn_export = tk.Button(action_frame, text="💾 Εξαγωγή CSV",
-                       font=("Arial", 12), bg="#2D9E6B", fg="white",
-                       relief="flat",
-                       command=export_csv)
-btn_export.pack(side=tk.LEFT, padx=15)
+frame = tk.Frame(root)
+frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-#-Pinakas
-table_frame = tk.Frame(root)
-table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+scroll_y = ttk.Scrollbar(frame, orient="vertical")
+scroll_x = ttk.Scrollbar(frame, orient="horizontal")
 
-scroll_x = tk.Scrollbar(table_frame, orient="horizontal")
-scroll_y = tk.Scrollbar(table_frame, orient="vertical")
-
-tree = ttk.Treeview(table_frame, xscrollcommand=scroll_x.set, yscrollcommand=scroll_y.set)
-
-scroll_x.config(command=tree.xview)
+tree = ttk.Treeview(frame, columns=COLUMNS, show="headings", yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
 scroll_y.config(command=tree.yview)
-
-scroll_x.pack(side="bottom", fill="x")
+scroll_x.config(command=tree.xview)
 scroll_y.pack(side="right", fill="y")
+scroll_x.pack(side="bottom", fill="x")
 tree.pack(fill="both", expand=True)
 
+for col in COLUMNS:
+    tree.heading(col, text=COLUMN_LABELS[col])
+    tree.column(col, width=130, anchor="w")
 
-# Έναρξη του event loop
+load_courses()
 root.mainloop()
