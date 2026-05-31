@@ -1,3 +1,9 @@
+"""Ranking utilities for scoring and ordering courses.
+
+This module provides heuristics to parse cost, duration, difficulty and
+language information and compute a composite score used to rank courses.
+"""
+
 import math
 import re
 
@@ -10,6 +16,14 @@ WEIGHTS = {
 
 
 def _parse_cost(value: str) -> float | None:
+    """Parse a cost string and return a numeric value or None.
+
+    Args:
+        value: Cost string to parse (examples: "$40", "Free").
+
+    Returns:
+        Float cost value or None when missing/unparseable.
+    """
     if not value or not str(value).strip():
         return None
     v = str(value).strip().lower()
@@ -25,6 +39,17 @@ def _parse_cost(value: str) -> float | None:
 
 
 def _parse_duration_days(value: str) -> float | None:
+    """Convert a human duration string into days (approximate).
+
+    Recognizes months/weeks/days and returns the corresponding day
+    count. Returns None when not parseable.
+
+    Args:
+        value: Human-readable duration string.
+
+    Returns:
+        Number of days as float, or None.
+    """
     if not value or not str(value).strip():
         return None
     v = str(value).strip().lower()
@@ -41,6 +66,14 @@ def _parse_duration_days(value: str) -> float | None:
 
 
 def _parse_difficulty(value: str) -> float | None:
+    """Map a difficulty string to a numeric score in [0,1].
+
+    Args:
+        value: Difficulty description string.
+
+    Returns:
+        A float representing difficulty or None if unavailable.
+    """
     if not value or not str(value).strip():
         return None
     v = str(value).strip().lower()
@@ -54,12 +87,33 @@ def _parse_difficulty(value: str) -> float | None:
 
 
 def _parse_language(value: str) -> float | None:
+    """Score language preference: English=1.0, others=0.5, None when empty.
+
+    Args:
+        value: Language string.
+
+    Returns:
+        Float score or None when unavailable.
+    """
     if not value or not str(value).strip():
         return None
     return 1.0 if "english" in str(value).strip().lower() else 0.5
 
 
 def compute_score(course: dict) -> float:
+    """Compute a composite score (0-100) for a course dictionary.
+
+    The function parses individual attributes, normalizes them and
+    applies weighted aggregation. Missing attributes are ignored and
+    weights are renormalized accordingly.
+
+    Args:
+        course: Dictionary with course metadata (cost, duration, difficulty,
+            language).
+
+    Returns:
+        Composite score as a float in the range 0.0-100.0.
+    """
     raw = {
         "cost": _parse_cost(course.get("cost", "")),
         "duration": _parse_duration_days(course.get("duration", "")),
@@ -79,6 +133,15 @@ def compute_score(course: dict) -> float:
 
 
 def rank_courses(courses: list[dict], top_n: int = 3) -> list[dict]:
+    """Return the top-N courses ordered by composite score.
+
+    Args:
+        courses: Iterable of course dicts.
+        top_n: Number of top results to return.
+
+    Returns:
+        A list of the top-N course dicts augmented with ``composite_score``.
+    """
     scored = []
     for course in courses:
         item = dict(course)

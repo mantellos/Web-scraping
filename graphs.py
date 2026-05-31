@@ -1,3 +1,10 @@
+"""Graphing helpers for course visualizations.
+
+This module provides functions to render bar, pie and line charts used
+by the GUI. It consumes normalized course dictionaries and uses
+matplotlib to produce the figures embedded in a Tkinter canvas.
+"""
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.figure import Figure
@@ -10,7 +17,18 @@ import os
 from data_processor import CourseRepository
 
 def _parse_duration_hours(value: str) -> float:
-    """Μετατρέπει διάρκεια σε ώρες (για τα γραφήματα)."""
+    """Convert a duration string to an approximate number of hours.
+
+    The function recognizes common tokens such as "weeks", "days",
+    "months" and numerical values and returns an approximate hour
+    equivalent used for sorting and plotting.
+
+    Args:
+        value: Human-readable duration string (e.g. "10 weeks", "40 hours").
+
+    Returns:
+        Approximate duration in hours as a float. Zero on unrecognized input.
+    """
     if not value:
         return 0
     v = str(value).lower()
@@ -28,7 +46,14 @@ def _parse_duration_hours(value: str) -> float:
 
 
 def _parse_cost(value: str) -> float:
-    """Μετατρέπει κόστος σε float δολάρια."""
+    """Parse a cost string and return a float USD value when possible.
+
+    Args:
+        value: Cost string (examples: "$40", "Free", "40,00").
+
+    Returns:
+        Parsed float value or 0.0 when not parseable or free.
+    """
     if not value or not value.strip():
         return 0.0
     v = value.strip().lower()
@@ -55,7 +80,20 @@ FIELD_ALIASES = {
 
 
 def _get_field_by_system_key(course: dict, key_type: str, default: str = "") -> str:
-    """Αναζητά μια τιμή στο λεξικό χρησιμοποιώντας όλα τα εναλλακτικά ονόματα (aliases)."""
+    """Return the value for a logical field considering aliases.
+
+    Many course dictionaries use different keys for the same concept
+    (for example, "duration" vs "time"). This helper searches through
+    known aliases and returns the normalized string value.
+
+    Args:
+        course: The course dictionary to inspect.
+        key_type: Logical key name as used in FIELD_ALIASES.
+        default: Fallback returned value when nothing found.
+
+    Returns:
+        String value for the requested logical key or the default.
+    """
     aliases = FIELD_ALIASES.get(key_type, [key_type])
     for alias in aliases:
         if alias in course:
@@ -68,7 +106,12 @@ def _get_field_by_system_key(course: dict, key_type: str, default: str = "") -> 
 
 
 def chart_bar_duration(ax, courses: list):
-    """Bar Chart – 5 μαθήματα με τη μεγαλύτερη χρονική διάρκεια."""
+    """Render a horizontal bar chart of top-5 longest courses.
+
+    Args:
+        ax: Matplotlib Axes object to draw on.
+        courses: Iterable of normalized course dicts.
+    """
     parsed = []
     for c in courses:
         raw_duration = _get_field_by_system_key(c, "duration", "")
@@ -109,7 +152,12 @@ def chart_bar_duration(ax, courses: list):
 
 
 def chart_pie_difficulty(ax, courses: list):
-    """Pie Chart – Κατανομή επιπέδου δυσκολίας."""
+    """Render a pie chart showing difficulty distribution.
+
+    Args:
+        ax: Matplotlib Axes object to draw on.
+        courses: Iterable of normalized course dicts.
+    """
     difficulty_map = {
         "introductory": "Εισαγωγικό", "beginner": "Εισαγωγικό", "εισαγωγικό": "Εισαγωγικό",
         "intermediate": "Μέτριο", "medium": "Μέτριο", "transitional": "Μέτριο", "μέτριο": "Μέτριο",
@@ -160,7 +208,12 @@ def chart_pie_difficulty(ax, courses: list):
 
 
 def chart_line_cost_duration(ax, courses: list):
-    """Line Plot – Συσχέτιση Κόστους και Διάρκειας (Top-5 διάρκεια)."""
+    """Render a line plot correlating cost with duration (top-5 by duration).
+
+    Args:
+        ax: Matplotlib Axes object to draw on.
+        courses: Iterable of normalized course dicts.
+    """
     parsed = []
     for c in courses:
         raw_duration = _get_field_by_system_key(c, "duration", "")
@@ -210,7 +263,17 @@ def chart_line_cost_duration(ax, courses: list):
 
 
 def open_graphs_window(parent, csv_file: str = "courses_data.csv", courses: list[dict] | None = None):
-    """Ανοίγει παράθυρο με επιλογή γραφήματος και εμφάνιση σε canvas."""
+    """Open a Tkinter window that displays selectable charts.
+
+    The function embeds matplotlib figures into a Tkinter canvas and
+    allows saving rendered charts to PNG files.
+
+    Args:
+        parent: The parent Tkinter widget.
+        csv_file: Path to CSV used by default when loading repository data.
+        courses: Optional list of course dicts to visualize; if omitted,
+            the function loads courses from the repository using csv_file.
+    """
     if courses is None:
         cr = CourseRepository(csv_file)
         courses = cr.load_courses()

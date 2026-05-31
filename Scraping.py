@@ -1,3 +1,12 @@
+"""Scraping utilities
+
+Functions to scrape course pages and extract common metadata such as
+title, duration, language and cost. Helpers attempt to read JSON-LD and
+common page structures to find duration information.
+
+All functions follow Google-style docstrings.
+"""
+
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -56,10 +65,26 @@ FIELD_MAP = {
 
 
 def _clean_text(value: str) -> str:
+    """Return a stripped string or empty string for non-strings.
+
+    Args:
+        value: Any value expected to be a string.
+
+    Returns:
+        The trimmed string or an empty string if input is not a string.
+    """
     return value.strip() if isinstance(value, str) else ""
 
 
 def _best_text(tags):
+    """Return the first non-empty text from a sequence of tags.
+
+    Args:
+        tags: Iterable of BeautifulSoup tag objects.
+
+    Returns:
+        The first cleaned text found, or an empty string if none.
+    """
     for tag in tags:
         text = _clean_text(tag.get_text())
         if text:
@@ -68,6 +93,16 @@ def _best_text(tags):
 
 
 def _parse_iso_duration(value: str) -> str:
+    """Parse an ISO-8601 duration to a human-readable string.
+
+    Examples: ``P2W`` -> "2 weeks", ``PT40H`` -> "40 hours".
+
+    Args:
+        value: ISO-8601 duration string.
+
+    Returns:
+        A readable duration string or empty string if parsing fails.
+    """
     if not value:
         return ""
     match = re.match(
@@ -94,6 +129,14 @@ def _parse_iso_duration(value: str) -> str:
 
 
 def _extract_duration_from_json_ld(soup: BeautifulSoup) -> str:
+    """Extract duration from JSON-LD script blocks when available.
+
+    Args:
+        soup: BeautifulSoup object of the page HTML.
+
+    Returns:
+        A normalized duration string if found, otherwise empty string.
+    """
     for script in soup.find_all("script", type="application/ld+json"):
         content = script.string
         if not content:
@@ -114,6 +157,14 @@ def _extract_duration_from_json_ld(soup: BeautifulSoup) -> str:
 
 
 def _extract_duration_from_script_text(html: str) -> str:
+    """Try to locate an ISO duration embedded in JavaScript or inline text.
+
+    Args:
+        html: Raw HTML text of the page.
+
+    Returns:
+        A parsed duration string or empty string if none found.
+    """
     match = re.search(r"duration\s*[:=]\s*['\"](P[T0-9HMS]+)['\"]", html, re.IGNORECASE)
     if match:
         return _parse_iso_duration(match.group(1))
@@ -121,6 +172,18 @@ def _extract_duration_from_script_text(html: str) -> str:
 
 
 def _find_scraped_duration(soup: BeautifulSoup, html: str) -> str:
+    """Locate the most likely duration on a scraped page.
+
+    The function attempts several heuristics in order: JSON-LD, script
+    text, nearby sibling elements for keywords, and common CSS classes.
+
+    Args:
+        soup: BeautifulSoup object for the page.
+        html: Raw HTML text for fallback regex searching.
+
+    Returns:
+        A duration string or empty string if none matched.
+    """
     # Try known page structures and JSON-LD first.
     result = _extract_duration_from_json_ld(soup)
     if result:
@@ -154,6 +217,15 @@ def _find_scraped_duration(soup: BeautifulSoup, html: str) -> str:
 
 
 def _normalize_scraped_course(data: dict) -> dict:
+    """Normalize a scraped course dict to the canonical schema.
+
+    Args:
+        data: Raw scraped values for a single course.
+
+    Returns:
+        A dict with keys: title, provider, category, difficulty, cost,
+        duration, language.
+    """
     return {
         "title": _clean_text(data.get("title", "")),
         "provider": _clean_text(data.get("provider", "")),
@@ -166,6 +238,16 @@ def _normalize_scraped_course(data: dict) -> dict:
 
 
 def scrape_course(url: str, classes: list[str], provider: str) -> dict:
+    """Scrape a single course page and return normalized data.
+
+    Args:
+        url: The course page URL to fetch.
+        classes: A list of CSS class names to inspect for metadata.
+        provider: Provider name used as a fallback for the "provider" field.
+
+    Returns:
+        A normalized course dictionary.
+    """
     try:
         response = requests.get(url, headers=HEADERS, timeout=10, verify=False)
         response.raise_for_status()
@@ -218,6 +300,11 @@ def scrape_course(url: str, classes: list[str], provider: str) -> dict:
 
 
 def scrape_all_web_sources() -> list[dict]:
+    """Scrape all configured sites and return a list of courses.
+
+    Returns:
+        A list of normalized course dicts scraped from the sites in SITES.
+    """
     courses = []
     for site in SITES:
         print(f"Scraping {site['url']}")
@@ -226,6 +313,10 @@ def scrape_all_web_sources() -> list[dict]:
 
 
 def main() -> None:
+    """Command-line entry point for quick scraping runs.
+
+    Prints a short summary of scraped courses to stdout.
+    """
     courses = scrape_all_web_sources()
     print(f"Scraped {len(courses)} courses.")
     for course in courses:

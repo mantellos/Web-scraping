@@ -1,3 +1,10 @@
+"""Data processing utilities and repository for course CSV storage.
+
+This module normalizes raw course payloads into a canonical schema and
+provides a small CSV-backed repository class for saving and loading
+course records.
+"""
+
 import csv
 import os
 import re
@@ -15,6 +22,16 @@ CSV_HEADERS = [
 
 
 def _get_first_value(raw: dict, keys: list[str], default: str = "") -> str:
+    """Return the first present, non-empty value from a list of keys.
+
+    Args:
+        raw: Dictionary to inspect.
+        keys: Candidate keys to check in order of preference.
+        default: Fallback value when none are found.
+
+    Returns:
+        A cleaned string value or ``default``.
+    """
     for key in keys:
         if key not in raw:
             continue
@@ -33,10 +50,25 @@ def _get_first_value(raw: dict, keys: list[str], default: str = "") -> str:
 
 
 def _normalize_text(raw: dict, keys: list[str], default: str = "") -> str:
+    """Normalize a text field using candidate keys and a default.
+
+    Args:
+        raw: Source dict.
+        keys: Candidate keys for the field.
+        default: Fallback when value is absent.
+
+    Returns:
+        The normalized string value.
+    """
     return _get_first_value(raw, keys, default)
 
 
 def _infer_category_by_title(title: str) -> str:
+    """Infer a broad category from keywords found in the title.
+
+    Returns a human-readable category label or "Uncategorized" when no
+    known keywords match.
+    """
     if not title or title == "Unknown Title":
         return "Uncategorized"
     text = title.lower()
@@ -62,6 +94,14 @@ def _infer_category_by_title(title: str) -> str:
 
 
 def _detect_language_by_title(title: str) -> str:
+    """Detect likely language by inspecting Unicode ranges in the title.
+
+    Args:
+        title: Course title string.
+
+    Returns:
+        A language label such as "Greek", "Russian", "Arabic" or "English".
+    """
     if not title or title == "Unknown Title":
         return "Unknown"
     if re.search(r"[\u0370-\u03FF\u1F00-\u1FFF]", title):
@@ -74,6 +114,11 @@ def _detect_language_by_title(title: str) -> str:
 
 
 def _normalize_category(raw: dict, title: str) -> str:
+    """Normalize or infer a course category.
+
+    Prefers explicit category fields but falls back to title-based
+    inference when necessary.
+    """
     value = _get_first_value(raw, ["category", "courseType", "Θεματική κατηγορία", "subject", "Study fields"], "")
     if value:
         cleaned = value.strip()
@@ -83,6 +128,14 @@ def _normalize_category(raw: dict, title: str) -> str:
 
 
 def _normalize_difficulty(raw: dict) -> str:
+    """Normalize difficulty field to one of Beginner/Intermediate/Advanced.
+
+    Args:
+        raw: Raw course dict.
+
+    Returns:
+        A normalized difficulty string.
+    """
     source = _get_first_value(raw, ["difficulty", "level", "Επίπεδο δυσκολίας"], "")
     if not source:
         return "Unknown"
@@ -97,6 +150,15 @@ def _normalize_difficulty(raw: dict) -> str:
 
 
 def _normalize_language(raw: dict, title: str) -> str:
+    """Normalize language information using explicit fields or title hints.
+
+    Args:
+        raw: Raw course dict.
+        title: Course title (used as a fallback for detection).
+
+    Returns:
+        Normalized language string.
+    """
     source = _get_first_value(raw, ["language", "primaryLanguages", "primaryLanguage", "Γλώσσα διδασκαλίας"], "")
     if not source:
         return _detect_language_by_title(title)
@@ -117,6 +179,7 @@ def _normalize_language(raw: dict, title: str) -> str:
 
 
 def _normalize_cost(raw: dict) -> str:
+    """Normalize cost to a human-friendly string (defaults to 'Free')."""
     value = _get_first_value(raw, ["cost", "price", "Κόστος"], "")
     if not value:
         return "Free"
@@ -127,6 +190,14 @@ def _normalize_cost(raw: dict) -> str:
 
 
 def normalize_course_data(course_data: dict) -> dict:
+    """Normalize a raw course payload into the canonical schema.
+
+    Args:
+        course_data: Raw course dictionary from scraping or API sources.
+
+    Returns:
+        A dict containing keys matching ``CSV_HEADERS``.
+    """
     # Included fallback keys commonly populated by scraping frameworks
     title = _normalize_text(course_data, ["title", "name", "course_title", "Τίτλος μαθήματος", "Τίτλος"], "Unknown Title")
     provider = _normalize_text(course_data, ["provider", "Πάροχος / Πανεπιστήμιο", "Πάροχος", "institution"], "Unknown Provider")
@@ -144,25 +215,40 @@ def normalize_course_data(course_data: dict) -> dict:
 
 class CourseRepository:
     def __init__(self, csv_path: str):
+        """Create a repository backed by a CSV file path.
+
+        Args:
+            csv_path: Path to the CSV file used for storage.
+        """
         self.csv_path = csv_path
         self._ensure_headers_exists()
 
+    def _create_file(self) -> None:
+        with open(self.csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
+            writer.writeheader()
+
     def _ensure_headers_exists(self) -> None:
+        """Ensure the CSV file exists and has the expected header row."""
         self._ensure_folder()
-        if not os.path.isfile(self.csv_path):
-            with open(self.csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
-                writer.writeheader()
+        self._create_file()
 
     def _ensure_folder(self) -> None:
+        """Create parent folder for the CSV if it does not exist."""
         folder = os.path.dirname(self.csv_path)
         if folder and not os.path.isdir(folder):
             os.makedirs(folder, exist_ok=True)
 
     def get_headers(self) -> list[str]:
+        """Return the CSV header column names used by the repository."""
         return CSV_HEADERS
     
     def load_courses(self) -> list[dict]:
+        """Load all course records from the CSV file.
+
+        Returns:
+            A list of course dictionaries following the canonical schema.
+        """
         courses: list[dict] = []
         if not os.path.isfile(self.csv_path):
             return courses
@@ -191,6 +277,12 @@ class CourseRepository:
         return courses
 
     def save_courses(self, courses: Iterable[dict]) -> None:
+        """Overwrite the CSV file with the provided course records.
+
+        Args:
+            courses: Iterable of raw course dicts; they will be normalized
+                before saving.
+        """
         normalized = [normalize_course_data(course) for course in courses]
         self._ensure_folder()
         with open(self.csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
@@ -199,6 +291,14 @@ class CourseRepository:
             writer.writerows(normalized)
 
     def append_courses(self, courses: Iterable[dict]) -> int:
+        """Append new courses to the CSV backing file, avoiding duplicates.
+
+        Args:
+            courses: Iterable of raw course dicts.
+
+        Returns:
+            The number of newly appended records.
+        """
         existing = self.load_courses()
         existing_titles = {
             course["title"].strip().lower() 
@@ -231,6 +331,13 @@ class CourseRepository:
         return len(normalized)
 
     def export_courses(self, filepath: str, courses: list[dict] | None = None) -> None:
+        """Export courses to an arbitrary CSV filepath.
+
+        Args:
+            filepath: Destination CSV path to write.
+            courses: Optional list of course dicts; when omitted the
+                repository's stored courses are exported.
+        """
         if courses is None:
             courses = self.load_courses()
         normalized = [normalize_course_data(course) for course in courses]
