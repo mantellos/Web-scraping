@@ -131,6 +131,30 @@ def compute_score(course: dict) -> float:
     score = sum(WEIGHTS[k] * v for k, v in available.items()) / total_weight
     return round(score * 100, 2)
 
+def get_categories(courses: list[dict]) -> list[str]:
+    """Επιστρέφει ταξινομημένη λίστα μοναδικών κατηγοριών."""
+    cats = sorted({
+        c.get("category", "").strip()
+        for c in courses
+        if c.get("category", "").strip()
+    })
+    return cats
+
+def rank_courses(
+        courses: list[dict],
+        top_n: int = 3,
+        category: str | None = None,
+) -> list[dict]:
+    """
+    Επιστρέφει τα top_n μαθήματα με το υψηλότερο composite score.
+    Αν δοθεί category, φιλτράρει πρώτα μόνο αυτή την κατηγορία.
+    """
+    pool = courses
+    if category and category.strip():
+        pool = [
+            c for c in courses
+            if c.get("category", "").strip().lower() == category.strip().lower()
+        ]
 
 def rank_courses(courses: list[dict], top_n: int = 3) -> list[dict]:
     """Return the top-N courses ordered by composite score.
@@ -143,9 +167,10 @@ def rank_courses(courses: list[dict], top_n: int = 3) -> list[dict]:
         A list of the top-N course dicts augmented with ``composite_score``.
     """
     scored = []
-    for course in courses:
+    for course in pool:
         item = dict(course)
         item["composite_score"] = compute_score(item)
         scored.append(item)
+
     scored.sort(key=lambda x: x["composite_score"], reverse=True)
     return scored[:top_n]

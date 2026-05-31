@@ -184,6 +184,8 @@ def open_filter_window():
     apply_filters(courses, combos, filter_tree)
 
 
+# ── Αντικατέστησε την open_ranking_window στο GUI.py με αυτή ──
+
 def open_ranking_window():
     """Open a window displaying the top-N ranked courses.
 
@@ -195,56 +197,133 @@ def open_ranking_window():
         messagebox.showinfo("Κατάταξη", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
         return
 
-    top_courses = rank_courses(courses, top_n=3)
+    from ranking import get_categories, rank_courses
+
     popup = tk.Toplevel(root)
     popup.title("Top 3 Μαθήματα")
-    popup.geometry("860x520")
+    popup.geometry("980x600")
     popup.resizable(True, True)
 
-    heading = tk.Label(popup, text="Top 3 Μαθήματα", font=("Arial", 14, "bold"))
-    heading.pack(pady=12)
+    tk.Label(popup, text="Top 3 Μαθήματα — Φίλτρα Αναζήτησης",
+             font=("Arial", 14, "bold")).pack(pady=10)
 
-    columns = ("rank", "title", "provider", "category", "difficulty", "cost", "duration", "language", "score")
+    # ── Φίλτρα ──
+    filter_frame = tk.LabelFrame(popup, text="Φίλτρα", font=("Arial", 10, "bold"),
+                                 padx=10, pady=8)
+    filter_frame.pack(fill="x", padx=16, pady=6)
+
+    def _unique_sorted(key):
+        return ["Όλα"] + sorted({
+            str(c.get(key, "")).strip()
+            for c in courses
+            if str(c.get(key, "")).strip()
+        })
+
+    filters = {}
+
+    fields = [
+        ("Κατηγορία", "category"),
+        ("Γλώσσα", "language"),
+        ("Δυσκολία", "difficulty"),
+        ("Κόστος", "cost"),
+        ("Διάρκεια", "duration"),
+    ]
+
+    for col, (label, key) in enumerate(fields):
+        tk.Label(filter_frame, text=label + ":", font=("Arial", 10)) \
+            .grid(row=0, column=col * 2, padx=(10, 2), sticky="e")
+        combo = ttk.Combobox(filter_frame, values=_unique_sorted(key),
+                             state="readonly", width=16, font=("Arial", 10))
+        combo.set("Όλα")
+        combo.grid(row=0, column=col * 2 + 1, padx=(0, 10))
+        filters[key] = combo
+
+    tk.Button(filter_frame, text="🔍  Εύρεση Top-3",
+              font=("Arial", 10, "bold"), bg="#f1c40f", relief="flat",
+              padx=12, pady=4,
+              command=lambda: _refresh_ranking()) \
+        .grid(row=0, column=len(fields) * 2, padx=16)
+
+    # ── Treeview ──
+    columns = ("rank", "title", "provider", "category", "difficulty",
+               "cost", "duration", "language", "score")
     tree_frame = tk.Frame(popup)
     tree_frame.pack(fill="both", expand=True, padx=12, pady=8)
+
     ranking_tree = ttk.Treeview(tree_frame, columns=columns, show="headings")
-    ranking_tree.pack(side="left", fill="both", expand=True)
-    scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=ranking_tree.yview)
-    scrollbar.pack(side="right", fill="y")
-    ranking_tree.configure(yscrollcommand=scrollbar.set)
+    vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=ranking_tree.yview)
+    hsb = ttk.Scrollbar(tree_frame, orient="horizontal", command=ranking_tree.xview)
+    ranking_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+    vsb.pack(side="right", fill="y")
+    hsb.pack(side="bottom", fill="x")
+    ranking_tree.pack(fill="both", expand=True)
 
     headings = {
-        "rank": "Θέση",
-        "title": "Τίτλος",
-        "provider": "Πάροχος",
-        "category": "Κατηγορία",
-        "difficulty": "Δυσκολία",
-        "cost": "Κόστος",
-        "duration": "Διάρκεια",
-        "language": "Γλώσσα",
-        "score": "Score",
+        "rank": "Θέση", "title": "Τίτλος", "provider": "Πάροχος",
+        "category": "Κατηγορία", "difficulty": "Δυσκολία",
+        "cost": "Κόστος", "duration": "Διάρκεια",
+        "language": "Γλώσσα", "score": "Score",
     }
-    widths = {key: 100 for key in columns}
-    widths["title"] = 220
-    widths["provider"] = 120
-    widths["score"] = 80
-
+    widths = {
+        "rank": 45, "title": 220, "provider": 120, "category": 110,
+        "difficulty": 90, "cost": 75, "duration": 110,
+        "language": 75, "score": 65,
+    }
     for col in columns:
         ranking_tree.heading(col, text=headings[col])
         ranking_tree.column(col, width=widths[col], anchor="center")
-    for index, course in enumerate(top_courses, start=1):
-        ranking_tree.insert("", "end", values=(
-            index,
-            course.get("title", ""),
-            course.get("provider", ""),
-            course.get("category", ""),
-            course.get("difficulty", ""),
-            course.get("cost", ""),
-            course.get("duration", ""),
-            course.get("language", ""),
-            f"{course.get('composite_score', 0):.1f}",
-        ))
 
+    result_label = tk.Label(popup, text="", font=("Arial", 10, "italic"), fg="#555")
+    result_label.pack(pady=(0, 8))
+
+    def _refresh_ranking():
+        # Χτίσε το filtered pool με βάση όλα τα φίλτρα
+        pool = []
+        for course in courses:
+            match = True
+            for key, combo in filters.items():
+                selected = combo.get().strip()
+                if selected == "Όλα":
+                    continue
+                if str(course.get(key, "")).strip() != selected:
+                    match = False
+                    break
+            if match:
+                pool.append(course)
+
+        ranking_tree.delete(*ranking_tree.get_children())
+
+        if not pool:
+            result_label.config(text="Δεν βρέθηκαν μαθήματα με τα επιλεγμένα φίλτρα.")
+            return
+
+        # Ranking μέσα στο filtered pool (χωρίς category filter — ήδη φιλτραρισμένο)
+        top_courses = rank_courses(pool, top_n=3)
+
+        for i, course in enumerate(top_courses, start=1):
+            ranking_tree.insert("", "end", values=(
+                i,
+                course.get("title", ""),
+                course.get("provider", ""),
+                course.get("category", ""),
+                course.get("difficulty", ""),
+                course.get("cost", ""),
+                course.get("duration", ""),
+                course.get("language", ""),
+                f"{course.get('composite_score', 0):.1f}",
+            ))
+
+        active = [
+            f"{k}={filters[k].get()}"
+            for k in filters
+            if filters[k].get() != "Όλα"
+        ]
+        summary = ", ".join(active) if active else "χωρίς φίλτρα"
+        result_label.config(
+            text=f"Top-{len(top_courses)} από {len(pool)} μαθήματα  |  Φίλτρα: {summary}"
+        )
+
+    _refresh_ranking()
 
 root = tk.Tk()
 root.title("Course Browser")
