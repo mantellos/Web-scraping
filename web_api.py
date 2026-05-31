@@ -12,11 +12,57 @@ URLS = [
     },
     {
         "name": "Coursera_API",
-        "url": "https://api.coursera.org/api/courses.v1?fields=name,description&limit=10",
+        "url": "https://api.coursera.org/api/courses.v1?fields=name,description,workload,primaryLanguages,language,slug,courseType&limit=10",
         "key": "elements",
         "headers": {},
     },
 ]
+
+
+def _format_time_to_complete(value) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        minutes = int(float(value))
+    except (TypeError, ValueError):
+        return ""
+    if minutes <= 0:
+        return ""
+    hours = minutes // 60
+    if hours > 0:
+        return f"{hours} hours"
+    return f"{minutes} minutes"
+
+
+def _normalize_api_duration(raw_course: dict, source_url: str) -> str:
+    if "stepik.org" in source_url:
+        workload = str(raw_course.get("workload", "") or "").strip()
+        if workload:
+            return workload
+        duration = raw_course.get("duration")
+        if duration:
+            return str(duration).strip()
+        return _format_time_to_complete(raw_course.get("time_to_complete"))
+
+    if "coursera.org" in source_url:
+        workload = str(raw_course.get("workload", "") or "").strip()
+        if workload:
+            return workload
+        duration = raw_course.get("duration")
+        if duration:
+            return str(duration).strip()
+        return ""
+
+    if "futurelearn.com" in source_url:
+        duration = raw_course.get("duration")
+        if duration:
+            return str(duration).strip()
+        return ""
+
+    duration = raw_course.get("duration")
+    if duration:
+        return str(duration).strip()
+    return ""
 
 
 def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
@@ -27,7 +73,7 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
             "category": raw_course.get("courseType", ""),
             "difficulty": raw_course.get("level", "Not specified"),
             "cost": str(raw_course.get("price", "")),
-            "duration": raw_course.get("duration", ""),
+            "duration": _normalize_api_duration(raw_course, source_url),
             "language": raw_course.get("primaryLanguages", ""),
         }
     if "futurelearn.com" in source_url:
@@ -40,7 +86,7 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
                 "category": data.get("subject", data.get("category", "")),
                 "difficulty": data.get("level", "Not specified"),
                 "cost": str(data.get("price", "")),
-                "duration": data.get("duration", ""),
+                "duration": _normalize_api_duration(data, source_url),
                 "language": data.get("language", ""),
             }
     if "stepik.org" in source_url:
@@ -50,7 +96,7 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
             "category": raw_course.get("subject", raw_course.get("category", "")),
             "difficulty": raw_course.get("level", "Not specified"),
             "cost": str(raw_course.get("price", "")),
-            "duration": raw_course.get("duration", ""),
+            "duration": _normalize_api_duration(raw_course, source_url),
             "language": raw_course.get("primaryLanguages", ""),
         }
     return {
@@ -59,7 +105,7 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
         "category": raw_course.get("courseType", raw_course.get("subject", "")),
         "difficulty": raw_course.get("level", "Not specified"),
         "cost": str(raw_course.get("price", "")),
-        "duration": raw_course.get("duration", ""),
+        "duration": _normalize_api_duration(raw_course, source_url),
         "language": raw_course.get("primaryLanguages", raw_course.get("language", "")),
     }
 

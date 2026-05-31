@@ -12,15 +12,7 @@ BASE_DIR = os.path.dirname(__file__)
 CSV_FILE = os.path.join(BASE_DIR, "courses_data.csv")
 repository = CourseRepository(CSV_FILE)
 
-COLUMNS = [
-    "title",
-    "provider",
-    "category",
-    "difficulty",
-    "cost",
-    "duration",
-    "language",
-]
+COLUMNS = repository.get_headers()
 
 COLUMN_LABELS = {
     "title": "Τίτλος Μαθήματος",
@@ -81,6 +73,24 @@ def export_csv():
     messagebox.showinfo("Εξαγωγή", f"Το αρχείο αποθηκεύτηκε:\n{filepath}")
 
 
+def apply_filters(courses, combos, target_tree):
+    filtered = []
+    for course in courses:
+        match = True
+        for key, combo_widget in combos.items():
+            selected_value = combo_widget.get()
+            actual_value = course.get(key) or "Άγνωστο"
+            if selected_value != "Όλα" and selected_value != actual_value:
+                match = False
+                break
+        if match:
+            filtered.append(course)
+            
+    target_tree.delete(*target_tree.get_children())
+    for course in filtered:
+        target_tree.insert("", "end", values=tuple(course.get(col, "") for col in COLUMNS))
+
+
 def open_filter_window():
     courses = repository.load_courses()
     if not courses:
@@ -92,27 +102,25 @@ def open_filter_window():
     popup.geometry("1040x560")
     popup.resizable(True, True)
 
-    values = {
-        "category": ["Όλα"] + sorted({course.get("category", "Unknown") for course in courses}),
-        "difficulty": ["Όλα"] + sorted({course.get("difficulty", "Unknown") for course in courses}),
-        "cost": ["Όλα"] + sorted({course.get("cost", "Άγνωστο") for course in courses}),
-        "language": ["Όλα"] + sorted({course.get("language", "Unknown") for course in courses}),
-    }
+    values = {}
+    for key in ["category", "difficulty", "cost", "duration","language"]:
+        values[key] = ["Όλα"] + sorted({str(course.get(key) or "Άγνωστο") for course in courses})
+
+    combos = {}
+    filterable_keys = [k for k in COLUMNS if k not in ["title", "provider"]]
 
     control_frame = tk.Frame(popup)
     control_frame.pack(fill="x", padx=14, pady=12)
 
-    labels = ["Κατηγορία", "Δυσκολία", "Κόστος", "Γλώσσα"]
-    keys = ["category", "difficulty", "cost", "language"]
-    combos = {}
-
-    for index, key in enumerate(keys):
-        tk.Label(control_frame, text=labels[index] + ":", font=("Arial", 10)).grid(row=0, column=index * 2, padx=6, pady=6, sticky="e")
-        combo = ttk.Combobox(control_frame, values=values[key], state="readonly", width=24)
-        combo.set(values[key][0])
-        combo.grid(row=0, column=index * 2 + 1, padx=6, pady=6)
+    for index, key in enumerate(filterable_keys):
+        label_text = COLUMN_LABELS.get(key, key.capitalize()) + ":"
+        tk.Label(control_frame, text=label_text, font=("Arial", 10)).grid(row=0, column=index * 2, padx=6)
+    
+        combo = ttk.Combobox(control_frame, values=values[key], state="readonly")
+        combo.set("Όλα")
+        combo.grid(row=0, column=index * 2 + 1, padx=6)
         combos[key] = combo
-
+    
     filter_frame = tk.Frame(popup)
     filter_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -128,22 +136,9 @@ def open_filter_window():
         filter_tree.heading(col, text=COLUMN_LABELS[col])
         filter_tree.column(col, width=130, anchor="w")
 
-    def apply_filters():
-        selected = {key: combos[key].get() for key in keys}
-        filtered = []
-        for course in courses:
-            if (selected["category"] in ("Όλα", course.get("category", ""))
-                    and selected["difficulty"] in ("Όλα", course.get("difficulty", ""))
-                    and selected["cost"] in ("Όλα", course.get("cost", ""))
-                    and selected["language"] in ("Όλα", course.get("language", ""))):
-                filtered.append(course)
-        filter_tree.delete(*filter_tree.get_children())
-        for course in filtered:
-            filter_tree.insert("", "end", values=tuple(course.get(col, "") for col in COLUMNS))
-
-    apply_button = tk.Button(control_frame, text="Φίλτρο", command=apply_filters, font=("Arial", 10, "bold"))
+    apply_button = tk.Button(control_frame, text="Φίλτρο", command=lambda: apply_filters(courses, combos, filter_tree), font=("Arial", 10, "bold"))
     apply_button.grid(row=0, column=8, padx=12, pady=6)
-    apply_filters()
+    apply_filters(courses, combos, filter_tree)
 
 
 def open_ranking_window():
@@ -240,7 +235,7 @@ btn_filters.pack(side="left", padx=6)
 btn_ranking = tk.Button(button_frame, text="Top-3", command=open_ranking_window, width=12, bg="#f1c40f")
 btn_ranking.pack(side="left", padx=6)
 
-btn_graphs = tk.Button(button_frame, text="Γραφήματα", command=lambda: open_graphs_window(root, CSV_FILE), width=12, bg="#8e44ad", fg="white")
+btn_graphs = tk.Button(button_frame, text="Γραφήματα", command=lambda: open_graphs_window(root, csv_file=CSV_FILE), width=12, bg="#8e44ad", fg="white")
 btn_graphs.pack(side="left", padx=6)
 
 btn_export = tk.Button(button_frame, text="Εξαγωγή CSV", command=export_csv, width=14, bg="#16a085", fg="white")

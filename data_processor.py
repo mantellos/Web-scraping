@@ -37,7 +37,7 @@ def _normalize_text(raw: dict, keys: list[str], default: str = "") -> str:
 
 
 def _infer_category_by_title(title: str) -> str:
-    if not title:
+    if not title or title == "Unknown Title":
         return "Uncategorized"
     text = title.lower()
     keyword_map = {
@@ -62,14 +62,14 @@ def _infer_category_by_title(title: str) -> str:
 
 
 def _detect_language_by_title(title: str) -> str:
-    if not title:
+    if not title or title == "Unknown Title":
         return "Unknown"
-    if re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", title):
-        return "Arabic"
-    if re.search(r"[\u0400-\u04FF\u0500-\u052F]", title):
-        return "Russian"
     if re.search(r"[\u0370-\u03FF\u1F00-\u1FFF]", title):
         return "Greek"
+    if re.search(r"[\u0400-\u04FF\u0500-\u052F]", title):
+        return "Russian"
+    if re.search(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]", title):
+        return "Arabic"
     return "English"
 
 
@@ -103,7 +103,7 @@ def _normalize_language(raw: dict, title: str) -> str:
     low = str(source).strip().lower()
     if low.startswith("en"):
         return "English"
-    if low.startswith("el"):
+    if low.startswith("el") or "greek" in low or "ελλην" in low:
         return "Greek"
     if low.startswith("ar") or "arabic" in low:
         return "Arabic"
@@ -118,18 +118,26 @@ def _normalize_language(raw: dict, title: str) -> str:
 
 def _normalize_cost(raw: dict) -> str:
     value = _get_first_value(raw, ["cost", "price", "Κόστος"], "")
-    return str(value).strip() if value else ""
+    if not value:
+        return "Free"
+    low_val = str(value).strip().lower()
+    if low_val in ("free", "0", "δωρεάν", "none", ""):
+        return "Free"
+    return str(value).strip()
 
 
 def normalize_course_data(course_data: dict) -> dict:
-    title = _normalize_text(course_data, ["title", "name", "course_title", "Τίτλος μαθήματος"], "Unknown Title")
+    # Included fallback keys commonly populated by scraping frameworks
+    title = _normalize_text(course_data, ["title", "name", "course_title", "Τίτλος μαθήματος", "Τίτλος"], "Unknown Title")
+    provider = _normalize_text(course_data, ["provider", "Πάροχος / Πανεπιστήμιο", "Πάροχος", "institution"], "Unknown Provider")
+    
     return {
         "title": title,
-        "provider": _normalize_text(course_data, ["provider", "Πάροχος / Πανεπιστήμιο", "Πάροχος"], "Unknown Provider"),
+        "provider": provider,
         "category": _normalize_category(course_data, title),
         "difficulty": _normalize_difficulty(course_data),
         "cost": _normalize_cost(course_data),
-        "duration": _normalize_text(course_data, ["duration", "length", "Διάρκεια"], ""),
+        "duration": _normalize_text(course_data, ["duration", "length", "Διάρκεια", "time"], "Unknown Duration"),
         "language": _normalize_language(course_data, title),
     }
 
@@ -137,12 +145,23 @@ def normalize_course_data(course_data: dict) -> dict:
 class CourseRepository:
     def __init__(self, csv_path: str):
         self.csv_path = csv_path
+        self._ensure_headers_exists()
+
+    def _ensure_headers_exists(self) -> None:
+        self._ensure_folder()
+        if not os.path.isfile(self.csv_path):
+            with open(self.csv_path, mode="w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
+                writer.writeheader()
 
     def _ensure_folder(self) -> None:
         folder = os.path.dirname(self.csv_path)
         if folder and not os.path.isdir(folder):
             os.makedirs(folder, exist_ok=True)
 
+    def get_headers(self) -> list[str]:
+        return CSV_HEADERS
+    
     def load_courses(self) -> list[dict]:
         courses: list[dict] = []
         if not os.path.isfile(self.csv_path):
@@ -150,10 +169,24 @@ class CourseRepository:
         try:
             with open(self.csv_path, mode="r", encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f)
+                
+                if reader.fieldnames:
+                    reader.fieldnames = [name.lstrip("\ufeff").strip() for name in reader.fieldnames]
+               
                 for row in reader:
-                    if row:
-                        courses.append({key: (row.get(key) or "").strip() for key in CSV_HEADERS})
-        except Exception:
+                    if not row or not any(row.values()):
+                        continue
+                    
+                    course_entry = {}
+                    for key in CSV_HEADERS:
+                        val = row.get(key)
+                        course_entry[key] = str(val).strip() if val is not None else ""
+                    
+                    # Ensure we don't load entirely blank rows as valid courses
+                    if course_entry["title"] and course_entry["title"] != "":
+                        courses.append(course_entry)
+        except Exception as e:
+            print(f"[Repository Error] Failed reading storage CSV matrix: {e}")
             return courses
         return courses
 
@@ -167,22 +200,34 @@ class CourseRepository:
 
     def append_courses(self, courses: Iterable[dict]) -> int:
         existing = self.load_courses()
-        existing_titles = {course["title"].strip().lower() for course in existing}
+        existing_titles = {
+            course["title"].strip().lower() 
+            for course in existing 
+            if course.get("title") and course["title"].strip() != ""
+        }
+        
         normalized = []
+        
         for raw_course in courses:
             course = normalize_course_data(raw_course)
-            if course["title"].strip().lower() not in existing_titles:
+            title_key = course["title"].strip().lower()
+  
+            if title_key not in existing_titles and title_key != "":
                 normalized.append(course)
-                existing_titles.add(course["title"].strip().lower())
+                existing_titles.add(title_key)
+                
         if not normalized:
             return 0
+            
         self._ensure_folder()
         file_exists = os.path.isfile(self.csv_path)
+        
         with open(self.csv_path, mode="a", encoding="utf-8-sig", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
-            if not file_exists:
+            if not file_exists or os.path.getsize(self.csv_path) == 0:
                 writer.writeheader()
             writer.writerows(normalized)
+            
         return len(normalized)
 
     def export_courses(self, filepath: str, courses: list[dict] | None = None) -> None:

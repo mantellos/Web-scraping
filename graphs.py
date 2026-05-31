@@ -7,10 +7,7 @@ from tkinter import ttk, messagebox
 from collections import Counter
 import re
 import os
-import csv
-
-
-# ─── Parsing helpers ────────────────────────────────────────────────────────
+from data_processor import CourseRepository
 
 def _parse_duration_hours(value: str) -> float:
     """Μετατρέπει διάρκεια σε ώρες (για τα γραφήματα)."""
@@ -47,7 +44,7 @@ def _parse_cost(value: str) -> float:
 
 
 FIELD_ALIASES = {
-    "title": ["title", "Τίτλος μαθήματος"],
+    "title": ["title", "Τίτλος μαθήματος", "Τίτλος Μαθήματος"],
     "provider": ["provider", "Πάροχος"],
     "category": ["category", "Κατηγορία"],
     "difficulty": ["difficulty", "Επίπεδο δυσκολίας", "Δυσκολία"],
@@ -57,46 +54,28 @@ FIELD_ALIASES = {
 }
 
 
-def _get_field(course: dict, keys: list[str], default: str = "") -> str:
-    for key in keys:
-        if key in course and course[key] is not None:
-            value = str(course[key]).strip()
-            if value:
-                return value
+def _get_field_by_system_key(course: dict, key_type: str, default: str = "") -> str:
+    """Αναζητά μια τιμή στο λεξικό χρησιμοποιώντας όλα τα εναλλακτικά ονόματα (aliases)."""
+    aliases = FIELD_ALIASES.get(key_type, [key_type])
+    for alias in aliases:
+        if alias in course:
+            return str(course[alias]).strip() if course[alias] is not None else default
+        # Έλεγχος για πεζά/κεφαλαία ή κενά
+        for actual_key in course.keys():
+            if actual_key.strip().lower() == alias.strip().lower():
+                return str(course[actual_key]).strip() if course[actual_key] is not None else default
     return default
 
-
-def load_courses_from_csv(csv_file: str) -> list:
-    """Φορτώνει τα μαθήματα από CSV row-based μορφής."""
-    courses = []
-    if not os.path.isfile(csv_file):
-        return courses
-    try:
-        with open(csv_file, encoding="utf-8-sig", newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if not row or not any((v or "").strip() for v in row.values()):
-                    continue
-                cleaned = {k.strip(): (v.strip() if v is not None else "") for k, v in row.items()}
-                course = {
-                    field: _get_field(cleaned, FIELD_ALIASES.get(field, [field]), "")
-                    for field in FIELD_ALIASES
-                }
-                courses.append(course)
-    except Exception as e:
-        print(f"Σφάλμα φόρτωσης CSV: {e}")
-    return courses
-
-
-# ─── Chart functions ─────────────────────────────────────────────────────────
 
 def chart_bar_duration(ax, courses: list):
     """Bar Chart – 5 μαθήματα με τη μεγαλύτερη χρονική διάρκεια."""
     parsed = []
     for c in courses:
-        hours = _parse_duration_hours(_get_field(c, ["duration", "Διάρκεια"], ""))
+        raw_duration = _get_field_by_system_key(c, "duration", "")
+        hours = _parse_duration_hours(raw_duration)
+        duration = raw_duration if raw_duration else "Άγνωστο"
         if hours > 0:
-            title = _get_field(c, ["title", "Τίτλος μαθήματος"], "Άγνωστο")
+            title = _get_field_by_system_key(c, "title", "Μάθημα")
             short = title[:24] + "…" if len(title) > 24 else title
             parsed.append((short, hours))
 
@@ -104,8 +83,9 @@ def chart_bar_duration(ax, courses: list):
     top5 = parsed[:5]
 
     if not top5:
-        ax.text(0.5, 0.5, "Δεν υπάρχουν δεδομένα", ha="center", va="center",
-                transform=ax.transAxes, fontsize=13)
+        ax.text(0.5, 0.5, "Δεν βρέθηκαν έγκυρα δεδομένα διάρκειας\n(π.χ. 10 weeks, 40 hours)", 
+                ha="center", va="center", transform=ax.transAxes, fontsize=11, color="red")
+        ax.set_title("Top-5 Μαθήματα – Μεγαλύτερη Χρονική Διάρκεια", fontsize=12, fontweight="bold", pad=12)
         return
 
     names, hours_vals = zip(*top5)
@@ -131,19 +111,19 @@ def chart_bar_duration(ax, courses: list):
 def chart_pie_difficulty(ax, courses: list):
     """Pie Chart – Κατανομή επιπέδου δυσκολίας."""
     difficulty_map = {
-        "introductory": "Εισαγωγικό", "beginner": "Εισαγωγικό",
-        "intermediate": "Μέτριο", "medium": "Μέτριο", "transitional": "Μέτριο",
-        "advanced": "Προχωρημένο",
+        "introductory": "Εισαγωγικό", "beginner": "Εισαγωγικό", "εισαγωγικό": "Εισαγωγικό",
+        "intermediate": "Μέτριο", "medium": "Μέτριο", "transitional": "Μέτριο", "μέτριο": "Μέτριο",
+        "advanced": "Προχωρημένο", "hard": "Προχωρημένο", "προχωρημένο": "Προχωρημένο",
     }
     counts = Counter()
     for c in courses:
-        raw = _get_field(c, ["difficulty", "Επίπεδο δυσκολίας", "Δυσκολία"], "").strip().lower()
+        raw = _get_field_by_system_key(c, "difficulty", "").strip().lower()
         label = difficulty_map.get(raw, "Άλλο")
         counts[label] += 1
 
-    if not counts:
-        ax.text(0.5, 0.5, "Δεν υπάρχουν δεδομένα", ha="center", va="center",
-                transform=ax.transAxes, fontsize=13)
+    if not counts or sum(counts.values()) == 0:
+        ax.text(0.5, 0.5, "Δεν υπάρχουν δεδομένα δυσκολίας", ha="center", va="center",
+                transform=ax.transAxes, fontsize=12, color="red")
         return
 
     labels = list(counts.keys())
@@ -183,10 +163,11 @@ def chart_line_cost_duration(ax, courses: list):
     """Line Plot – Συσχέτιση Κόστους και Διάρκειας (Top-5 διάρκεια)."""
     parsed = []
     for c in courses:
-        hours = _parse_duration_hours(_get_field(c, ["duration", "Διάρκεια"], ""))
-        cost  = _parse_cost(_get_field(c, ["cost", "Κόστος"], ""))
-        title = _get_field(c, ["title", "Τίτλος μαθήματος"], "")
+        raw_duration = _get_field_by_system_key(c, "duration", "")
+        hours = _parse_duration_hours(raw_duration)
+        cost  = _parse_cost(_get_field_by_system_key(c, "cost", ""))
         if hours > 0:
+            title = _get_field_by_system_key(c, "title", "Μάθημα")
             short = title[:18] + "…" if len(title) > 18 else title
             parsed.append((short, hours, cost))
 
@@ -194,8 +175,9 @@ def chart_line_cost_duration(ax, courses: list):
     top5 = parsed[:5]
 
     if not top5:
-        ax.text(0.5, 0.5, "Δεν υπάρχουν δεδομένα", ha="center", va="center",
-                transform=ax.transAxes, fontsize=13)
+        ax.text(0.5, 0.5, "Δεν βρέθηκαν επαρκή δεδομένα κόστους/διάρκειας", ha="center", va="center",
+                transform=ax.transAxes, fontsize=11, color="red")
+        ax.set_title("Συσχέτιση Κόστους & Διάρκειας  (Top-5 Διάρκεια)", fontsize=12, fontweight="bold", pad=12)
         return
 
     names, hours_vals, costs = zip(*top5)
@@ -227,14 +209,13 @@ def chart_line_cost_duration(ax, courses: list):
     ax.set_axisbelow(True)
 
 
-# ─── Main popup window ────────────────────────────────────────────────────────
-
-def open_graphs_window(parent, csv_file: str = "courses_data.csv"):
+def open_graphs_window(parent, csv_file: str = "courses_data.csv", courses: list[dict] | None = None):
     """Ανοίγει παράθυρο με επιλογή γραφήματος και εμφάνιση σε canvas."""
-    courses = load_courses_from_csv(csv_file)
+    if courses is None:
+        cr = CourseRepository(csv_file)
+        courses = cr.load_courses()
     if not courses:
-        messagebox.showinfo("Γραφήματα",
-                            "Δεν βρέθηκαν δεδομένα.\nΦορτώστε πρώτα το CSV.")
+        messagebox.showinfo("Γραφήματα", "Δεν βρέθηκαν δεδομένα.\nΦορτώστε πρώτα το CSV.")
         return
 
     win = tk.Toplevel(parent)
@@ -243,13 +224,11 @@ def open_graphs_window(parent, csv_file: str = "courses_data.csv"):
     win.resizable(True, True)
     win.configure(bg="#F0F4FF")
 
-    # Τίτλος
     tk.Label(win,
              text="📊  Ανάλυση & Οπτικοποίηση με Matplotlib",
              font=("Georgia", 14, "bold"),
              bg="#F0F4FF", fg="#1a1a2e").pack(pady=(14, 4))
 
-    # Επιλογή γραφήματος
     ctrl = tk.Frame(win, bg="#F0F4FF")
     ctrl.pack(pady=6)
 
@@ -270,7 +249,7 @@ def open_graphs_window(parent, csv_file: str = "courses_data.csv"):
     canvas_frame = tk.Frame(win, bg="#F0F4FF")
     canvas_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    current_canvas = {"widget": None}
+    current_canvas: dict[str, FigureCanvasTkAgg | None] = {"widget": None}
 
     def draw_chart(*_):
         if current_canvas["widget"]:
@@ -295,7 +274,6 @@ def open_graphs_window(parent, csv_file: str = "courses_data.csv"):
 
     combo.bind("<<ComboboxSelected>>", draw_chart)
 
-    # Κουμπί αποθήκευσης
     def save_chart():
         if not current_canvas["widget"]:
             return
@@ -313,4 +291,4 @@ def open_graphs_window(parent, csv_file: str = "courses_data.csv"):
               relief="flat", padx=12, pady=4,
               command=save_chart).pack(pady=(0, 12))
 
-    draw_chart()  # αρχικό γράφημα
+    draw_chart()
