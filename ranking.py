@@ -1,5 +1,11 @@
 import math
 import re
+"""Ranking utilities for scoring and ordering courses.
+
+This module provides heuristics to parse cost, duration, difficulty and
+language information and compute a composite score used to rank courses.
+"""
+
 
 WEIGHTS = {
     "cost": 0.40,
@@ -10,6 +16,14 @@ WEIGHTS = {
 
 
 def _parse_cost(value: str) -> float | None:
+    """Parse a cost string and return a numeric value or None.
+
+        Args:
+            value: Cost string to parse (examples: "$40", "Free").
+
+        Returns:
+            Float cost value or None when missing/unparseable.
+        """
     if not value or not str(value).strip():
         return None
     v = str(value).strip().lower()
@@ -25,6 +39,17 @@ def _parse_cost(value: str) -> float | None:
 
 
 def _parse_duration_days(value: str) -> float | None:
+    """Convert a human duration string into days (approximate).
+
+        Recognizes months/weeks/days and returns the corresponding day
+        count. Returns None when not parseable.
+
+        Args:
+            value: Human-readable duration string.
+
+        Returns:
+            Number of days as float, or None.
+        """
     if not value or not str(value).strip():
         return None
     v = str(value).strip().lower()

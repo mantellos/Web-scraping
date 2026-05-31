@@ -66,6 +66,19 @@ def _normalize_api_duration(raw_course: dict, source_url: str) -> str:
 
 
 def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
+    """Map provider-specific course payload to a standard dict schema.
+
+       The normalized schema contains the following keys: ``title``,
+       ``provider``, ``category``, ``difficulty``, ``cost``, ``duration``,
+       and ``language``.
+
+       Args:
+           raw_course: Raw course payload from a provider API.
+           source_url: The provider API URL to infer provider-specific keys.
+
+       Returns:
+           A dictionary with normalized course fields.
+       """
     if "coursera.org" in source_url:
         return {
             "title": raw_course.get("name", "Unknown Course"),
@@ -111,6 +124,15 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
 
 
 def fetch_api_data() -> list[dict]:
+    """Fetch course lists from configured API endpoints and normalize them.
+
+        The function iterates over the global ``URLS`` list, performs HTTP GET
+        requests, parses JSON responses and normalizes each course record using
+        _normalize_course_data.
+
+        Returns:
+            A list of normalized course dictionaries.
+        """
     all_courses = []
     for item in URLS:
         try:

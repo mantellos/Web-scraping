@@ -61,6 +61,7 @@ def _clean_text(value: str) -> str:
 
 def _best_text(tags):
     for tag in tags:
+
         text = _clean_text(tag.get_text())
         if text:
             return text
@@ -94,6 +95,14 @@ def _parse_iso_duration(value: str) -> str:
 
 
 def _extract_duration_from_json_ld(soup: BeautifulSoup) -> str:
+    """Extract duration from JSON-LD script blocks when available.
+
+        Args:
+            soup: BeautifulSoup object of the page HTML.
+
+        Returns:
+            A normalized duration string if found, otherwise empty string.
+        """
     for script in soup.find_all("script", type="application/ld+json"):
         content = script.string
         if not content:
@@ -114,6 +123,14 @@ def _extract_duration_from_json_ld(soup: BeautifulSoup) -> str:
 
 
 def _extract_duration_from_script_text(html: str) -> str:
+    """Try to locate an ISO duration embedded in JavaScript or inline text.
+
+       Args:
+           html: Raw HTML text of the page.
+
+       Returns:
+           A parsed duration string or empty string if none found.
+       """
     match = re.search(r"duration\s*[:=]\s*['\"](P[T0-9HMS]+)['\"]", html, re.IGNORECASE)
     if match:
         return _parse_iso_duration(match.group(1))
@@ -121,6 +138,18 @@ def _extract_duration_from_script_text(html: str) -> str:
 
 
 def _find_scraped_duration(soup: BeautifulSoup, html: str) -> str:
+    """Locate the most likely duration on a scraped page.
+
+        The function attempts several heuristics in order: JSON-LD, script
+        text, nearby sibling elements for keywords, and common CSS classes.
+
+        Args:
+            soup: BeautifulSoup object for the page.
+            html: Raw HTML text for fallback regex searching.
+
+        Returns:
+            A duration string or empty string if none matched.
+        """
     # Try known page structures and JSON-LD first.
     result = _extract_duration_from_json_ld(soup)
     if result:

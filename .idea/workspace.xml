@@ -4,10 +4,15 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="67b26bea-6737-43f1-a71c-50e6084fd318" name="Changes" comment="sxedon teleiwse emeine mia mikri allagh mono">
+    <list default="true" id="67b26bea-6737-43f1-a71c-50e6084fd318" name="Changes" comment="Allages sto top-3">
+      <change afterPath="$PROJECT_DIR$/debug.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/GUI.py" beforeDir="false" afterPath="$PROJECT_DIR$/GUI.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Scraping.py" beforeDir="false" afterPath="$PROJECT_DIR$/Scraping.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/courses_data.csv" beforeDir="false" afterPath="$PROJECT_DIR$/courses_data.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data_processor.py" beforeDir="false" afterPath="$PROJECT_DIR$/data_processor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ranking.py" beforeDir="false" afterPath="$PROJECT_DIR$/ranking.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/web_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/web_api.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -48,30 +53,32 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python.GUI.executor&quot;: &quot;Run&quot;,
-    &quot;Python.Scraping.executor&quot;: &quot;Run&quot;,
-    &quot;Python.Web-Data-API.executor&quot;: &quot;Run&quot;,
-    &quot;Python.graphs.executor&quot;: &quot;Run&quot;,
-    &quot;Python.main.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;ml.llm.AcpAgentsConfigurable&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.GUI.executor": "Run",
+    "Python.Scraping.executor": "Run",
+    "Python.Web-Data-API.executor": "Run",
+    "Python.data_processor.executor": "Run",
+    "Python.debug.executor": "Run",
+    "Python.graphs.executor": "Run",
+    "Python.main.executor": "Run",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "ai.playground.ignore.import.keys.banner.in.settings": "true",
+    "git-widget-placeholder": "main",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "ml.llm.AcpAgentsConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -108,7 +115,9 @@
       <workItem from="1779897587341" duration="9377000" />
       <workItem from="1779955627079" duration="3770000" />
       <workItem from="1779983953356" duration="3513000" />
-      <workItem from="1780004458498" duration="377000" />
+      <workItem from="1780004458498" duration="1098000" />
+      <workItem from="1780150899598" duration="1586000" />
+      <workItem from="1780239173698" duration="12644000" />
     </task>
     <task id="LOCAL-00001" summary="Project Python arxiko version koitakse to">
       <option name="closed" value="true" />
@@ -158,11 +167,38 @@
       <option name="project" value="LOCAL" />
       <updated>1779986485197</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="Eginan kai oi telikes allages">
+      <option name="closed" value="true" />
+      <created>1780004946179</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1780004946179</updated>
+    </task>
+    <task id="LOCAL-00008" summary="Allages sto top-3">
+      <option name="closed" value="true" />
+      <created>1780248311757</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1780248311757</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Project Python arxiko version koitakse to" />
@@ -171,13 +207,17 @@
     <MESSAGE value="Douleuoun kai ta filters sto peripou" />
     <MESSAGE value="Eginan sxedon ola exoun minei mono ta graphs kai telos i guess :)" />
     <MESSAGE value="sxedon teleiwse emeine mia mikri allagh mono" />
-    <option name="LAST_COMMIT_MESSAGE" value="sxedon teleiwse emeine mia mikri allagh mono" />
+    <MESSAGE value="Eginan kai oi telikes allages" />
+    <MESSAGE value="Allages sto top-3" />
+    <option name="LAST_COMMIT_MESSAGE" value="Allages sto top-3" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/PYTHON_PROJ$GUI.coverage" NAME="GUI Coverage Results" MODIFIED="1779985326877" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PYTHON_PROJ$GUI.coverage" NAME="GUI Coverage Results" MODIFIED="1780253882822" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PYTHON_PROJ$data_processor.coverage" NAME="data_processor Coverage Results" MODIFIED="1780242989225" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/PYTHON_PROJ$graphs.coverage" NAME="graphs Coverage Results" MODIFIED="1779956149115" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/PYTHON_PROJ$main.coverage" NAME="main Coverage Results" MODIFIED="1778319791273" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PYTHON_PROJ$Scraping.coverage" NAME="Scraping Coverage Results" MODIFIED="1779913836057" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
-    <SUITE FILE_PATH="coverage/PYTHON_PROJ$Web_Data_API.coverage" NAME="Web-Data-API Coverage Results" MODIFIED="1779824281203" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PYTHON_PROJ$Scraping.coverage" NAME="Scraping Coverage Results" MODIFIED="1780239866753" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PYTHON_PROJ$debug.coverage" NAME="debug Coverage Results" MODIFIED="1780244788838" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PYTHON_PROJ$Web_Data_API.coverage" NAME="Web-Data-API Coverage Results" MODIFIED="1780004805583" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
   </component>
 </project>
