@@ -2,6 +2,12 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
+"""Graphical user interface for the Course Browser application.
+
+This module builds a Tkinter-based UI that allows users to load,
+filter, scrape, fetch (API) and visualize course data stored as CSV.
+"""
+
 from data_processor import CourseRepository
 from ranking import rank_courses
 from graphs import open_graphs_window
@@ -26,18 +32,33 @@ COLUMN_LABELS = {
 
 
 def refresh_table(courses: list[dict]):
+    """Refresh the main Treeview table with provided courses.
+
+    Args:
+        courses: A list of normalized course dictionaries.
+    """
     tree.delete(*tree.get_children())
     for course in courses:
         tree.insert("", "end", values=tuple(course.get(col, "") for col in COLUMNS))
 
 
 def load_courses():
+    """Load courses from the repository and refresh the UI table.
+
+    Returns:
+        The list of loaded course dictionaries.
+    """
     courses = repository.load_courses()
     refresh_table(courses)
     return courses
 
 
 def run_api_pipeline():
+    """Run the external API collection pipeline and persist new courses.
+
+    The function fetches courses using ``fetch_api_data``, appends any
+    new records to the repository, and updates the table view.
+    """
     courses = fetch_api_data()
     if not courses:
         messagebox.showwarning("API", "Δεν βρέθηκαν δεδομένα από το API.")
@@ -48,6 +69,11 @@ def run_api_pipeline():
 
 
 def run_scraping_pipeline():
+    """Run the web scraping pipeline and store any new courses.
+
+    The function scrapes configured sites and appends new records to the
+    repository before refreshing the UI table.
+    """
     courses = scrape_all_web_sources()
     if not courses:
         messagebox.showwarning("Scraping", "Δεν βρέθηκαν δεδομένα κατά το scraping.")
@@ -58,6 +84,11 @@ def run_scraping_pipeline():
 
 
 def export_csv():
+    """Export currently stored courses to a user-selected CSV file.
+
+    Opens a save dialog and writes the CSV using the repository export
+    helper.
+    """
     courses = repository.load_courses()
     if not courses:
         messagebox.showwarning("Εξαγωγή", "Δεν υπάρχουν δεδομένα για εξαγωγή.")
@@ -74,6 +105,13 @@ def export_csv():
 
 
 def apply_filters(courses, combos, target_tree):
+    """Filter a set of courses based on combobox selections and update a tree.
+
+    Args:
+        courses: List of course dicts to filter.
+        combos: Mapping of logical keys to ttk.Combobox widgets.
+        target_tree: The Treeview to update with filtered rows.
+    """
     filtered = []
     for course in courses:
         match = True
@@ -92,6 +130,11 @@ def apply_filters(courses, combos, target_tree):
 
 
 def open_filter_window():
+    """Open a filter window allowing users to filter courses by fields.
+
+    The window presents Comboboxes for various categorical fields and a
+    tree view that shows the filtered results.
+    """
     courses = repository.load_courses()
     if not courses:
         messagebox.showinfo("Φίλτρα", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
@@ -144,6 +187,11 @@ def open_filter_window():
 # ── Αντικατέστησε την open_ranking_window στο GUI.py με αυτή ──
 
 def open_ranking_window():
+    """Open a window displaying the top-N ranked courses.
+
+    The ranking is computed using the ``rank_courses`` function from
+    the ``ranking`` module and displayed in a read-only Treeview.
+    """
     courses = repository.load_courses()
     if not courses:
         messagebox.showinfo("Κατάταξη", "Δεν υπάρχουν δεδομένα. Φορτώστε πρώτα το CSV.")
@@ -286,7 +334,7 @@ header_frame.pack(fill="x", padx=20, pady=10)
 
 info_text = (
     "Συμμετέχοντες | ΑΜ\n"
-    "Μιχαήλ Άγγελος Δημηρίδης | 1115538\n"
+    "Μιχαήλ Άγγελος Δεμιρίδης | 1115538\n"
     "Κωνσταντίνος Μαντέλλος   | 1119106\n"
     "Θεοφάνης Τζεφρώνης       | 1115472"
 )

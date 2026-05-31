@@ -1,3 +1,11 @@
+"""web_api module
+
+Utility functions to fetch and normalize course data from several
+third-party course provider APIs (Stepik, Coursera, etc.).
+
+All public functions and helpers use Google-style docstrings.
+"""
+
 import requests
 
 URLS = [
@@ -20,6 +28,18 @@ URLS = [
 
 
 def _format_time_to_complete(value) -> str:
+    """Format a numeric time-to-complete value into a human string.
+
+    The API sometimes returns minutes as a string/number. This helper
+    converts minutes into a readable string such as "2 hours" or
+    "45 minutes". Invalid inputs return an empty string.
+
+    Args:
+        value: Numeric or string value representing minutes.
+
+    Returns:
+        A formatted duration string or an empty string on failure.
+    """
     if value is None or value == "":
         return ""
     try:
@@ -35,6 +55,18 @@ def _format_time_to_complete(value) -> str:
 
 
 def _normalize_api_duration(raw_course: dict, source_url: str) -> str:
+    """Normalize various API-specific duration fields to a string.
+
+    Different providers expose duration/workload in different fields.
+    This helper checks known keys and returns a unified duration string.
+
+    Args:
+        raw_course: Raw course dictionary returned by an API.
+        source_url: The URL string used to identify the provider.
+
+    Returns:
+        A normalized duration string, or an empty string if unavailable.
+    """
     if "stepik.org" in source_url:
         workload = str(raw_course.get("workload", "") or "").strip()
         if workload:
@@ -66,6 +98,19 @@ def _normalize_api_duration(raw_course: dict, source_url: str) -> str:
 
 
 def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
+    """Map provider-specific course payload to a standard dict schema.
+
+    The normalized schema contains the following keys: ``title``,
+    ``provider``, ``category``, ``difficulty``, ``cost``, ``duration``,
+    and ``language``.
+
+    Args:
+        raw_course: Raw course payload from a provider API.
+        source_url: The provider API URL to infer provider-specific keys.
+
+    Returns:
+        A dictionary with normalized course fields.
+    """
     if "coursera.org" in source_url:
         return {
             "title": raw_course.get("name", "Unknown Course"),
@@ -111,6 +156,15 @@ def _normalize_course_data(raw_course: dict, source_url: str) -> dict:
 
 
 def fetch_api_data() -> list[dict]:
+    """Fetch course lists from configured API endpoints and normalize them.
+
+    The function iterates over the global ``URLS`` list, performs HTTP GET
+    requests, parses JSON responses and normalizes each course record using
+    _normalize_course_data.
+
+    Returns:
+        A list of normalized course dictionaries.
+    """
     all_courses = []
     for item in URLS:
         try:
