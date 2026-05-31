@@ -1,37 +1,7 @@
+import json
 import requests
 from bs4 import BeautifulSoup
-import csv
 import re
-import urllib3
-import random
-
-# Suppress SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-SITES = [
-    {
-        "url": "https://pll.harvard.edu/course/using-python-research",
-        "classes": ["topics--teaser","field__item"],
-    },
-    {
-        "url": "https://pll.harvard.edu/course/cs50-lawyers",
-        "classes": ["topics--teaser","field__item"],
-    },
-    {
-        "url": "https://online.yale.edu/programs/foundations-animal-ethics",
-        "classes": ["badge badge-primary"],
-    },
-    {
-        "url": "https://online.yale.edu/programs/foundations-of-bioethics",
-        "classes": ["badge badge-primary"],
-    },
-
-    {
-        "url": "https://www.tuni.fi/en/tau/open-university/course-offering/5g-mobile-communications",
-        "classes": ["badge badge-primary"],
-    },
-
-]
 
 HEADERS = {
     "User-Agent": (
@@ -43,195 +13,223 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
+SITES = [
+    {
+        "url": "https://pll.harvard.edu/course/using-python-research",
+        "provider": "Harvard University",
+        "classes": ["topics--teaser", "field__item"],
+    },
+    {
+        "url": "https://pll.harvard.edu/course/cs50-lawyers",
+        "provider": "Harvard University",
+        "classes": ["topics--teaser", "field__item"],
+    },
+    {
+        "url": "https://online.yale.edu/programs/foundations-animal-ethics",
+        "provider": "Yale University",
+        "classes": ["badge badge-primary"],
+    },
+    {
+        "url": "https://online.yale.edu/programs/foundations-of-bioethics",
+        "provider": "Yale University",
+        "classes": ["badge badge-primary"],
+    },
+    {
+        "url": "https://www.tuni.fi/en/tau/open-university/course-offering/5g-mobile-communications",
+        "provider": "Tampere University",
+        "classes": ["badge badge-primary"],
+    },
+]
+
 FIELD_MAP = {
-    ("dubject","Study fields"):  "Θεματική κατηγορία",
-    ("Difficulty",): "Επίπεδο δυσκολίας",
-    ("Price",):"Κόστος",
-    ("Duration",):   "Διάρκεια",
-    ("Course Language", "Language"):"Γλώσσα διδασκαλίας",
-}
-CLASS_MAP = {
-    "field__item":       "Κόστος",  # ή όποιο πεδίο αντιστοιχεί
-    "badge badge-primary": "Θεματική κατηγορία",
-    "topics--teaser": "Θεματική κατηγορία",
-    "field__item": "Επίπεδο δυσκολίας"
-}
-
-DEFAULT_VALUES = {
-    "Θεματική κατηγορία":     "Δεν βρέθηκε",
-    "Επίπεδο δυσκολίας":     "Intermediate",
-    "Κόστος":                ["320$","430$","225$"],
-    "Διάρκεια":              ["6 Weeks","3 Weeks"],
-    "Γλώσσα διδασκαλίας":   ["English","French"]
+    "course language": "language",
+    "language": "language",
+    "difficulty": "difficulty",
+    "price": "cost",
+    "duration": "duration",
+    "study fields": "category",
+    "subject": "category",
+    "time commitment": "duration",
+    "course length": "duration",
+    "workload": "duration",
 }
 
 
-def scrape_course(url: str, classes: list) -> dict:
-    """Κάνει scrape τη σελίδα του μαθήματος και επιστρέφει dict με τα δεδομένα."""
+def _clean_text(value: str) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _best_text(tags):
+    for tag in tags:
+        text = _clean_text(tag.get_text())
+        if text:
+            return text
+    return ""
+
+
+def _parse_iso_duration(value: str) -> str:
+    if not value:
+        return ""
+    match = re.match(
+        r"^P(?:(?P<weeks>\d+)W)?(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?)?$",
+        value,
+        re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    groups = match.groupdict()
+    if groups["weeks"]:
+        return f"{groups['weeks']} weeks"
+    if groups["days"]:
+        return f"{groups['days']} days"
+    hours = groups.get("hours")
+    minutes = groups.get("minutes")
+    if hours and minutes:
+        return f"{hours} hours {minutes} minutes"
+    if hours:
+        return f"{hours} hours"
+    if minutes:
+        return f"{minutes} minutes"
+    return ""
+
+
+def _extract_duration_from_json_ld(soup: BeautifulSoup) -> str:
+    for script in soup.find_all("script", type="application/ld+json"):
+        content = script.string
+        if not content:
+            continue
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        items = payload if isinstance(payload, list) else [payload]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            duration = item.get("duration") or item.get("timeRequired")
+            result = _parse_iso_duration(duration)
+            if result:
+                return result
+    return ""
+
+
+def _extract_duration_from_script_text(html: str) -> str:
+    match = re.search(r"duration\s*[:=]\s*['\"](P[T0-9HMS]+)['\"]", html, re.IGNORECASE)
+    if match:
+        return _parse_iso_duration(match.group(1))
+    return ""
+
+
+def _find_scraped_duration(soup: BeautifulSoup, html: str) -> str:
+    # Try known page structures and JSON-LD first.
+    result = _extract_duration_from_json_ld(soup)
+    if result:
+        return result
+    result = _extract_duration_from_script_text(html)
+    if result:
+        return result
+
+    for keyword in ["duration", "time commitment", "workload", "course length"]:
+        tag = soup.find(string=re.compile(re.escape(keyword), re.IGNORECASE))
+        if tag:
+            parent = tag.find_parent()
+            if parent is not None:
+                sibling = parent.find_next_sibling()
+                if sibling is not None:
+                    duration_text = _clean_text(sibling.get_text(strip=True))
+                    if duration_text:
+                        return duration_text
+
+    duration_tag = soup.find(class_=re.compile(r"data-grid-item__duration|field--name-field-duration|field--name-field-pace", re.IGNORECASE))
+    if duration_tag:
+        duration_text = _clean_text(duration_tag.get_text(strip=True))
+        if duration_text:
+            return duration_text
+
+    for tag in soup.find_all(class_="field__item"):
+        text = _clean_text(tag.get_text(strip=True))
+        if re.search(r"\d+\s*(?:week|weeks|hour|hours|day|days|month|months|min|mins|minute|minutes)", text, re.IGNORECASE):
+            return text
+    return ""
+
+
+def _normalize_scraped_course(data: dict) -> dict:
+    return {
+        "title": _clean_text(data.get("title", "")),
+        "provider": _clean_text(data.get("provider", "")),
+        "category": _clean_text(data.get("category", "")),
+        "difficulty": _clean_text(data.get("difficulty", "")),
+        "cost": _clean_text(data.get("cost", "")),
+        "duration": _clean_text(data.get("duration", "")),
+        "language": _clean_text(data.get("language", "")),
+    }
+
+
+def scrape_course(url: str, classes: list[str], provider: str) -> dict:
     try:
         response = requests.get(url, headers=HEADERS, timeout=10, verify=False)
         response.raise_for_status()
-    except requests.exceptions.Timeout:
-        print(f"Timeout - Η σύνδεση ξεπέρασε το όριο χρόνου")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Σφάλμα σύνδεσης: {type(e).__name__}")
-        return None
-    
-    soup = BeautifulSoup(response.text, "html.parser")
+    except requests.RequestException as exc:
+        print(f"Scraping failed for {url}: {type(exc).__name__} {exc}")
+        return _normalize_scraped_course({
+            "title": "",
+            "provider": provider,
+            "category": "",
+            "difficulty": "",
+            "cost": "",
+            "duration": "",
+            "language": "",
+        })
 
+    soup = BeautifulSoup(response.text, "html.parser")
     data = {
-        "Τίτλος μαθήματος":      "",
-        "Πάροχος / Πανεπιστήμιο": "",
-        "Θεματική κατηγορία":    "",
-        "Επίπεδο δυσκολίας":     "",
-        "Κόστος":                "",
-        "Διάρκεια":              "",
-        "Γλώσσα διδασκαλίας":   "",
+        "title": _clean_text(soup.find("h1").get_text(strip=True)) if soup.find("h1") else "",
+        "provider": provider,
+        "category": "",
+        "difficulty": "",
+        "cost": "",
+        "duration": _find_scraped_duration(soup, response.text),
+        "language": "",
     }
 
-    # 1. Τίτλος
-    title_tag = soup.find("h1")
-    if title_tag:
-        data["Τίτλος μαθήματος"] = title_tag.get_text(strip=True)
+    for keyword, target in FIELD_MAP.items():
+        tag = soup.find(string=re.compile(re.escape(keyword), re.IGNORECASE))
+        if tag:
+            parent = tag.find_parent()
+            if parent is not None:
+                sibling = parent.find_next_sibling()
+                if sibling is not None:
+                    value = _clean_text(sibling.get_text(strip=True))
+                    if value:
+                        data[target] = value
+                        continue
 
-    # 2. Πάροχος
-    if "https://pll.harvard.edu" in url:
-        data["Πάροχος / Πανεπιστήμιο"] = "Harvard University"
-    elif "https://online.yale.edu" in url:
-        data["Πάροχος / Πανεπιστήμιο"] = "Yale University"
-    elif "https://www.tuni.fi" in url:
-        data["Πάροχος / Πανεπιστήμιο"]= "Open University"
-    else:
-        data["Πάροχος / Πανεπιστήμιο"] = "Άγνωστος Πάροχος"
-
-    # 3. Βασικά metadata
-    for labels, greek_col in FIELD_MAP.items():
-        labels = (labels,) if isinstance(labels, str) else labels  # αν είναι string, το κάνει tuple
-        for eng_label in labels:
-            tag = soup.find(string=re.compile(eng_label,re.IGNORECASE))
-            if tag:
-                parent = tag.find_parent()
-                sibling = parent.find_next_sibling() if parent else None
-                if sibling:
-                    data[greek_col] = sibling.get_text(strip=True)
-                    break
-
-    # 4. Scrape συγκεκριμένων classes για κάθε site
     for css_class in classes:
-        greek_col = CLASS_MAP.get(css_class)
-        if not greek_col:
-            continue
         if css_class == "field__item":
-            difficulty_block = soup.find("div", class_=lambda c: c and "field--name-field-difficulty" in c)
-            if difficulty_block:
-                item = difficulty_block.find(class_="field__item")
-                if item:
-                    data[greek_col] = item.get_text(strip=True)
+            items = soup.find_all(class_="field__item")
+            if items:
+                data["difficulty"] = _best_text(items)
         else:
-            # Για Yale (badge badge-primary) και άλλα classes: παίρνουμε το πρώτο
             items = soup.find_all(class_=css_class.split())
             if items:
-                values = [i.get_text(strip=True) for i in items if i.get_text(strip=True)]
-                data[greek_col] = values[0]
+                data["category"] = _best_text(items)
+
+    return _normalize_scraped_course(data)
 
 
-    for field, default in DEFAULT_VALUES.items():
-        if not data[field]:
-            if isinstance(default, list):
-                data[field] = random.choice(default)
-            else:
-                data[field] = default
-
-    return data
-
-
-def read_existing_csv(csv_file: str) -> tuple:
-    """Διαβάζει το υπάρχον CSV και επιστρέφει (τίτλους, γραμμές) αν υπάρχει."""
-    import os
-    if not (os.path.isfile(csv_file) and os.path.getsize(csv_file) > 0):
-        return [], {}
-
-    with open(csv_file, mode="r", newline="", encoding="utf-8-sig") as f:
-        rows = list(csv.reader(f))
-
-    if not rows:
-        return [], {}
-
-    existing_titles = rows[0][1:]
-    existing_rows = {row[0]: row[1:] for row in rows[1:] if row}
-    return existing_titles, existing_rows
-
-
-def save_to_csv(all_courses: list, output_file: str):
-    """Προσθέτει τα νέα μαθήματα δεξιά στο υπάρχον CSV χωρίς να διαγράψει τα υπάρχοντα."""
-    # 1. Συλλογή όλων των μοναδικών κλειδιών
-    all_keys = []
-    for course in all_courses:
-        for k in course:
-            if k not in all_keys:
-                all_keys.append(k)
-
-    # 2. Συμπλήρωση κενών
-    for course in all_courses:
-        for key in all_keys:
-            if key not in course or course[key] == "" or course[key] is None:
-                course[key] = "Μη διαθέσιμο"
-
-    # 3. Διάβασμα υπάρχοντος CSV
-    existing_titles, existing_rows = read_existing_csv(output_file)
-
-    # 4. Συνδυασμός παλιών + νέων τίτλων
-    new_titles = [c.get("Τίτλος μαθήματος", f"Μάθημα {i + 1}") for i, c in enumerate(all_courses)]
-    all_titles = existing_titles + new_titles
-
-    # 5. Αποθήκευση
-    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.writer(f)
-
-        writer.writerow(["Πεδίο"] + all_titles)
-
-        for key in all_keys:
-            if key == "Τίτλος μαθήματος":
-                continue
-            old_values = existing_rows.get(key, [""] * len(existing_titles))
-            new_values = [course[key] for course in all_courses]
-            writer.writerow([key] + old_values + new_values)
-
-
-def main():
-    all_courses = []
-
+def scrape_all_web_sources() -> list[dict]:
+    courses = []
     for site in SITES:
-        url = site["url"]
-        classes = site["classes"]
-        print(f"⏳ Scraping: {url}")
-        print(f"   Classes: {classes}")
-        try:
-            data = scrape_course(url, classes)
-            if data is None:
-                continue
-            all_courses.append(data)
-            print(f"   ✅ {data.get('Τίτλος μαθήματος', 'Άγνωστος τίτλος')}")
-            for css_class in classes:
-                key = f"Class: {css_class}"
-                print(f"   {key}: {data.get(key, '-')}")
-        except requests.HTTPError as e:
-            print(f"   HTTP Error {e.response.status_code}")
-        except requests.exceptions.Timeout:
-            print(f"   Timeout - Σύνδεση πολύ αργή")
-        except requests.exceptions.ConnectionError as e:
-            print(f"   Σφάλμα σύνδεσης: {e}")
-        except Exception as e:
-            print(f"   Σφάλμα: {e}")
+        print(f"Scraping {site['url']}")
+        courses.append(scrape_course(site["url"], site["classes"], site["provider"]))
+    return courses
 
-    if not all_courses:
-        print("\nΔεν βρέθηκαν δεδομένα. Έλεγξε τη σύνδεσή σου και δοκίμασε τοπικά.")
-        return
 
-    output_file = "courses_data.csv"
-    save_to_csv(all_courses, output_file)
-    print(f"\n✅ Αποθηκεύτηκε επιτυχώς στο {output_file}")
+def main() -> None:
+    courses = scrape_all_web_sources()
+    print(f"Scraped {len(courses)} courses.")
+    for course in courses:
+        print(course)
 
 
 if __name__ == "__main__":
